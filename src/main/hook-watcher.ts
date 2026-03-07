@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { BrowserWindow } from 'electron';
 import { PtyManager } from './pty-manager';
+import { WsServer } from './ws-server';
 import { IPC } from '../shared/ipc-channels';
 
 /**
@@ -20,7 +20,7 @@ const PLANS_DIR = path.join(os.homedir(), '.claude', 'plans');
 
 export function startHookWatcher(
   ptyManager: PtyManager,
-  getWindow: () => BrowserWindow | null
+  server: WsServer
 ): () => void {
   const lastContent = new Map<string, string>();
   const lastPlanContent = new Map<string, string>();
@@ -30,9 +30,6 @@ export function startHookWatcher(
   const STATUS_DIR = path.join(os.tmpdir(), `airport-${process.pid}`);
 
   function processSession(sessionId: string) {
-    const win = getWindow();
-    if (!win || win.isDestroyed()) return;
-
     const filePath = ptyManager.getStatusFile(sessionId);
     if (!filePath) return;
 
@@ -51,14 +48,11 @@ export function startHookWatcher(
     const message = semi >= 0 ? content.slice(semi + 1) : '';
 
     if (state === 'busy' || state === 'done') {
-      win.webContents.send(IPC.HOOK_STATUS, { sessionId, state, message });
+      server.broadcast(IPC.HOOK_STATUS, { sessionId, state, message });
     }
   }
 
   function processPlanFile(sessionId: string) {
-    const win = getWindow();
-    if (!win || win.isDestroyed()) return;
-
     const statusFile = ptyManager.getStatusFile(sessionId);
     if (!statusFile) return;
 
@@ -73,7 +67,7 @@ export function startHookWatcher(
     if (!planPath || planPath === lastPlanContent.get(sessionId)) return;
     lastPlanContent.set(sessionId, planPath);
 
-    win.webContents.send(IPC.HOOK_PLAN, { sessionId, planPath });
+    server.broadcast(IPC.HOOK_PLAN, { sessionId, planPath });
   }
 
   // Guard against macOS fs.watch firing duplicate events for the same file
@@ -85,9 +79,6 @@ export function startHookWatcher(
     processedSpawns.add(basename);
     // Clean up after a short delay to avoid unbounded growth
     setTimeout(() => processedSpawns.delete(basename), 5000);
-
-    const win = getWindow();
-    if (!win || win.isDestroyed()) return;
 
     let raw: string;
     try {
@@ -105,7 +96,7 @@ export function startHookWatcher(
     }
 
     // Forward to renderer — it owns PTY + shadow terminal creation
-    win.webContents.send(IPC.SPAWN_REQUEST, {
+    server.broadcast(IPC.SPAWN_REQUEST, {
       title: request.title,
       cwd: request.cwd,
       command: request.command,
@@ -140,9 +131,6 @@ export function startHookWatcher(
   // Plan mode writes files internally (not via the Write tool), so the hook-based
   // detection alone won't catch them. This polling assigns new plans to busy sessions.
   function pollPlansDirectory() {
-    const win = getWindow();
-    if (!win || win.isDestroyed()) return;
-
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(PLANS_DIR, { withFileTypes: true });
@@ -200,7 +188,7 @@ export function startHookWatcher(
 
       if (candidate) {
         lastPlanContent.set(candidate, file.path);
-        win.webContents.send(IPC.HOOK_PLAN, { sessionId: candidate, planPath: file.path });
+        server.broadcast(IPC.HOOK_PLAN, { sessionId: candidate, planPath: file.path });
       }
     }
   }

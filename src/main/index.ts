@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { PtyManager } from './pty-manager';
+import { WsServer } from './ws-server';
 import { registerIpcHandlers } from './ipc-handlers';
 import { setupMenu } from './menu';
 import { IPC } from '../shared/ipc-channels';
@@ -12,9 +13,11 @@ if (started) {
 }
 
 const isDev = !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
-app.setName(isDev ? 'Airport Dev' : 'Airport');
+const branchTag = process.env.AIRPORT_BRANCH_TAG;
+const devName = branchTag ? `Airport Dev (${branchTag})` : 'Airport Dev';
+app.setName(isDev ? devName : 'Airport');
 if (isDev) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'Airport Dev'));
+  app.setPath('userData', path.join(app.getPath('appData'), devName));
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -22,6 +25,7 @@ if (!gotLock) {
   app.quit();
 } else {
   const ptyManager = new PtyManager();
+  const wsServer = new WsServer();
   let mainWindow: BrowserWindow | null = null;
   let stateSaved = false;
 
@@ -47,7 +51,7 @@ if (!gotLock) {
     mainWindow.on('close', (e) => {
       if (!stateSaved && mainWindow && !mainWindow.isDestroyed()) {
         e.preventDefault();
-        mainWindow.webContents.send(IPC.STATE_REQUEST_SAVE);
+        wsServer.broadcast(IPC.STATE_REQUEST_SAVE);
         // Give the renderer time to save, then actually close
         setTimeout(() => {
           stateSaved = true;
@@ -59,11 +63,15 @@ if (!gotLock) {
       }
     });
 
+    const port = wsServer.getPort();
     if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+      const url = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+      url.searchParams.set('wsPort', String(port));
+      mainWindow.loadURL(url.toString());
     } else {
       mainWindow.loadFile(
-        path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+        path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+        { query: { wsPort: String(port) } }
       );
     }
 
@@ -72,8 +80,8 @@ if (!gotLock) {
     });
   };
 
-  registerIpcHandlers(ptyManager, () => mainWindow);
-  const stopHookWatcher = startHookWatcher(ptyManager, () => mainWindow);
+  registerIpcHandlers(ptyManager, wsServer);
+  const stopHookWatcher = startHookWatcher(ptyManager, wsServer);
 
   app.on('second-instance', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -82,8 +90,9 @@ if (!gotLock) {
     }
   });
 
-  app.on('ready', () => {
-    setupMenu();
+  app.on('ready', async () => {
+    await wsServer.start();
+    setupMenu(wsServer);
     createWindow();
   });
 
@@ -103,16 +112,18 @@ if (!gotLock) {
   app.on('before-quit', (e) => {
     if (!stateSaved && mainWindow && !mainWindow.isDestroyed()) {
       e.preventDefault();
-      mainWindow.webContents.send(IPC.STATE_REQUEST_SAVE);
+      wsServer.broadcast(IPC.STATE_REQUEST_SAVE);
       setTimeout(() => {
         stateSaved = true;
         stopHookWatcher();
         ptyManager.closeAll();
+        wsServer.close();
         app.quit();
       }, 500);
     } else {
       stopHookWatcher();
       ptyManager.closeAll();
+      wsServer.close();
     }
   });
 }
