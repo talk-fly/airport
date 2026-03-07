@@ -1,6 +1,7 @@
-import { app, Menu, BrowserWindow } from 'electron';
+import { app, Menu } from 'electron';
+import { WsServer } from './ws-server';
 
-export function setupMenu(): void {
+export function setupMenu(server: WsServer): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -23,14 +24,14 @@ export function setupMenu(): void {
           label: 'New Session',
           accelerator: 'CmdOrCtrl+T',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:new-session');
+            server.broadcast('menu:new-session');
           },
         },
         {
           label: 'Close Session',
           accelerator: 'CmdOrCtrl+W',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:close-session');
+            server.broadcast('menu:close-session');
           },
         },
         { type: 'separator' },
@@ -38,7 +39,7 @@ export function setupMenu(): void {
           label: 'Jump to Next Waiting',
           accelerator: 'CmdOrCtrl+J',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:jump-waiting');
+            server.broadcast('menu:jump-waiting');
           },
         },
         { type: 'separator' },
@@ -46,14 +47,14 @@ export function setupMenu(): void {
           label: 'Next Session',
           accelerator: 'CmdOrCtrl+]',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:next-session');
+            server.broadcast('menu:next-session');
           },
         },
         {
           label: 'Previous Session',
           accelerator: 'CmdOrCtrl+[',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:prev-session');
+            server.broadcast('menu:prev-session');
           },
         },
         {
@@ -61,7 +62,7 @@ export function setupMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+]',
           visible: false,
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:next-session');
+            server.broadcast('menu:next-session');
           },
         },
         {
@@ -69,7 +70,7 @@ export function setupMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+[',
           visible: false,
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:prev-session');
+            server.broadcast('menu:prev-session');
           },
         },
         { type: 'separator' },
@@ -77,7 +78,7 @@ export function setupMenu(): void {
           label: 'Clear Terminal',
           accelerator: 'CmdOrCtrl+K',
           click: () => {
-            BrowserWindow.getFocusedWindow()?.webContents.send('menu:clear-terminal');
+            server.broadcast('menu:clear-terminal');
           },
         },
       ],

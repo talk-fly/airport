@@ -1,9 +1,9 @@
-import { ipcMain, BrowserWindow } from 'electron';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs';
 import { PtyManager } from './pty-manager';
+import { WsServer } from './ws-server';
 import { IPC } from '../shared/ipc-channels';
 import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile } from '../shared/types';
 import { saveState, loadState } from './state-manager';
@@ -27,42 +27,36 @@ async function getDeepestDescendant(pid: number): Promise<number> {
   }
 }
 
-export function registerIpcHandlers(ptyManager: PtyManager, getWindow: () => BrowserWindow | null): void {
-  ipcMain.handle(IPC.PTY_CREATE, (_event, options: PtyCreateOptions) => {
+export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): void {
+  server.handle(IPC.PTY_CREATE, (options: PtyCreateOptions) => {
     return ptyManager.create(
       options,
       (sessionId, data) => {
-        const win = getWindow();
-        if (win && !win.isDestroyed()) {
-          win.webContents.send(IPC.PTY_DATA, { sessionId, data });
-        }
+        server.broadcast(IPC.PTY_DATA, { sessionId, data });
       },
       (sessionId, exitCode) => {
-        const win = getWindow();
-        if (win && !win.isDestroyed()) {
-          win.webContents.send(IPC.PTY_EXIT, { sessionId, exitCode });
-        }
+        server.broadcast(IPC.PTY_EXIT, { sessionId, exitCode });
       }
     );
   });
 
-  ipcMain.on(IPC.PTY_WRITE, (_event, sessionId: string, data: string) => {
+  server.on(IPC.PTY_WRITE, (sessionId: string, data: string) => {
     ptyManager.write(sessionId, data);
   });
 
-  ipcMain.on(IPC.PTY_RESIZE, (_event, sessionId: string, cols: number, rows: number) => {
+  server.on(IPC.PTY_RESIZE, (sessionId: string, cols: number, rows: number) => {
     ptyManager.resize(sessionId, cols, rows);
   });
 
-  ipcMain.on(IPC.PTY_CLOSE, (_event, sessionId: string) => {
+  server.on(IPC.PTY_CLOSE, (sessionId: string) => {
     ptyManager.close(sessionId);
   });
 
-  ipcMain.handle(IPC.PTY_GET_PROCESS_NAME, (_event, sessionId: string) => {
+  server.handle(IPC.PTY_GET_PROCESS_NAME, (sessionId: string) => {
     return ptyManager.getProcessName(sessionId);
   });
 
-  ipcMain.handle(IPC.GET_SESSION_INFO, async (_event, sessionId: string): Promise<SessionInfo> => {
+  server.handle(IPC.GET_SESSION_INFO, async (sessionId: string): Promise<SessionInfo> => {
     const pid = ptyManager.getPid(sessionId);
     if (!pid) return { cwd: '', gitRepo: '', gitBranch: '' };
 
@@ -94,7 +88,7 @@ export function registerIpcHandlers(ptyManager: PtyManager, getWindow: () => Bro
     return { cwd, gitRepo, gitBranch };
   });
 
-  ipcMain.handle(IPC.DISCOVER_TERMINALS, async (): Promise<ExternalTerminal[]> => {
+  server.handle(IPC.DISCOVER_TERMINALS, async (): Promise<ExternalTerminal[]> => {
     const ownPids = new Set(ptyManager.getOwnPids());
     const shellNames = new Set(['zsh', 'bash', 'fish', 'sh', 'tcsh', 'ksh']);
 
@@ -153,7 +147,7 @@ export function registerIpcHandlers(ptyManager: PtyManager, getWindow: () => Bro
     });
   });
 
-  ipcMain.handle(IPC.PLAN_GET_FILES, async (_event, _cwd: string): Promise<PlanFile[]> => {
+  server.handle(IPC.PLAN_GET_FILES, async (_cwd: string): Promise<PlanFile[]> => {
     // Claude Code stores all plans globally in ~/.claude/plans/.
     // Return all plan files so the renderer can track which are new.
     const home = process.env.HOME || process.env.USERPROFILE || '';
@@ -175,7 +169,7 @@ export function registerIpcHandlers(ptyManager: PtyManager, getWindow: () => Bro
     }
   });
 
-  ipcMain.handle(IPC.PLAN_READ_FILE, async (_event, filePath: string): Promise<string> => {
+  server.handle(IPC.PLAN_READ_FILE, async (filePath: string): Promise<string> => {
     if (!filePath.includes('.claude/plans/') && !filePath.includes('.claude\\plans\\')) return '';
     if (!filePath.endsWith('.md')) return '';
     try {
@@ -185,11 +179,11 @@ export function registerIpcHandlers(ptyManager: PtyManager, getWindow: () => Bro
     }
   });
 
-  ipcMain.handle(IPC.STATE_SAVE, (_event, state: SavedState) => {
+  server.handle(IPC.STATE_SAVE, (state: SavedState) => {
     saveState(state);
   });
 
-  ipcMain.handle(IPC.STATE_LOAD, () => {
+  server.handle(IPC.STATE_LOAD, () => {
     return loadState();
   });
 }
