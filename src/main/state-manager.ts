@@ -1,9 +1,11 @@
-import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import type { SavedState } from '../shared/types';
 
-const STATE_FILE = path.join(app.getPath('userData'), 'session-state.json');
+const DATA_DIR = process.env.AIRPORT_DATA_DIR || path.join(os.homedir(), 'Library', 'Application Support', 'Airport');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const STATE_FILE = path.join(DATA_DIR, 'session-state.json');
 
 export function saveState(state: SavedState): void {
   try {

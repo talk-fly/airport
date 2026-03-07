@@ -91,6 +91,12 @@ typings/
 # Electron-Forge
 out/
 
+# Standalone build output
+dist/
+
+# Swift build artifacts
+macos/Airport/.build/
+
 # Claude Code (local machine paths)
 .claude/
 
