@@ -36,4 +36,5 @@ mv "$TMP_DIR/Airport.app" /Applications/Airport.app
 
 echo ""
 echo "Airport ${LATEST} installed to /Applications/Airport.app"
-echo "Run:  open /Applications/Airport.app"
+echo "Launching Airport..."
+open /Applications/Airport.app
