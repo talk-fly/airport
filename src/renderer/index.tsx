@@ -2,9 +2,11 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { connect, createAirportApi } from './lib/ws-bridge';
 
-const port = new URLSearchParams(window.location.search).get('wsPort');
+const params = new URLSearchParams(window.location.search);
+const wsPort = params.get('wsPort');
+const port = wsPort ? Number(wsPort) : Number(window.location.port);
 
-connect(Number(port)).then(() => {
+connect(port).then(() => {
   window.airport = createAirportApi();
   const root = createRoot(document.getElementById('root')!);
   root.render(<App />);

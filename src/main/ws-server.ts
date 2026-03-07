@@ -1,3 +1,4 @@
+import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/ws-protocol';
 
@@ -35,7 +36,21 @@ export class WsServer {
     return this.port;
   }
 
-  start(): Promise<void> {
+  start(httpServer?: http.Server): Promise<void> {
+    if (httpServer) {
+      this.wss = new WebSocketServer({ server: httpServer });
+      const addr = httpServer.address();
+      if (typeof addr === 'object' && addr) {
+        this.port = addr.port;
+      }
+      this.wss.on('connection', (ws) => {
+        this.clients.add(ws);
+        ws.on('close', () => this.clients.delete(ws));
+        ws.on('message', (raw) => this.onMessage(ws, raw.toString()));
+      });
+      return Promise.resolve();
+    }
+
     return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
 

@@ -23,7 +23,8 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "prepublishOnly": "electron-forge package"
+    "prepublishOnly": "electron-forge package",
+    "build:standalone": "node esbuild.backend.mjs && npx vite build --config vite.standalone.config.ts"
   },
   "keywords": [
     "electron",
@@ -62,6 +63,7 @@
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "40.6.1",
+    "esbuild": "^0.27.3",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "typescript": "~5.6.0",

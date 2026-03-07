@@ -24,6 +24,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  process.env.AIRPORT_DATA_DIR = app.getPath('userData');
   const ptyManager = new PtyManager();
   const wsServer = new WsServer();
   let mainWindow: BrowserWindow | null = null;

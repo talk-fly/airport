@@ -11,7 +11,7 @@ interface PtySession {
 }
 
 const STATUS_DIR = path.join(os.tmpdir(), `airport-${process.pid}`);
-const BIN_DIR = path.join(__dirname, '..', '..', 'bin');
+const BIN_DIR = process.env.AIRPORT_BIN_DIR || path.join(__dirname, '..', '..', 'bin');
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
