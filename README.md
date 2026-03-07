@@ -2,20 +2,34 @@
 
 A terminal multiplexer built for AI coding CLIs. Run multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions side-by-side with live status previews, so you always know which session needs your attention.
 
-## Quick Start
+## Install
 
 ```bash
-npx airport-ai
+curl -fsSL https://get-airport.com/install.sh | bash
 ```
 
-## Install & Build from Source
-
-Requires Node 20+ (see `.nvmrc`).
+Or with Homebrew:
 
 ```bash
+brew install --cask airport
+```
+
+Then launch the app:
+
+```bash
+open /Applications/Airport.app
+```
+
+## Build from Source
+
+Requires Node 20+, Swift toolchain (Xcode CLI tools), and Git.
+
+```bash
+git clone https://github.com/tomer-van-cohen/airport.git
+cd airport
 npm install --legacy-peer-deps
-npm start          # dev mode
-npm run make       # build distributable
+./scripts/build-native.sh
+open dist/Airport.app
 ```
 
 ## Keyboard Shortcuts
@@ -30,13 +44,11 @@ npm run make       # build distributable
 | `Cmd+J` | Jump to next waiting session |
 | `Cmd+K` | Clear terminal |
 
-On Linux / Windows, substitute `Ctrl` for `Cmd`.
-
 ## Claude Code Hooks
 
 Airport ships two shell scripts in `hooks/` that let it show real-time Claude Code activity (e.g. "Reading `App.tsx`", "Running agent: fix tests") inside each session tile.
 
-**Hooks are installed automatically** into `~/.claude/settings.json` when you run `npm start`. The setup is idempotent and won't overwrite your existing hooks.
+**Hooks are installed automatically** when you launch Airport. The setup is idempotent and won't overwrite your existing hooks.
 
 To remove them, delete the Airport entries from `~/.claude/settings.json` under the `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, and `Notification` events.
 
