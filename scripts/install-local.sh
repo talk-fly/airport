@@ -5,8 +5,14 @@ set -e
 
 cd "$(dirname "$0")/.."
 
+# Ensure dependencies are installed
+if [ ! -d "node_modules" ]; then
+  echo "Installing dependencies..."
+  npm install --legacy-peer-deps
+fi
+
 echo "Building Airport..."
-npm run package
+npx electron-forge package
 
 ARCH=$(uname -m)
 PACKAGED="out/Airport-darwin-${ARCH}/Airport.app"
