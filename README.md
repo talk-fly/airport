@@ -20,6 +20,17 @@ The biggest addition: Airport now captures Claude Code **session IDs** via a new
 3. Airport's `hook-watcher.ts` detects the `.claude-session` file and broadcasts the ID to the renderer
 4. On save, the session ID is persisted; on restore, it's passed as an env var so `.zshrc` can `--resume` the session
 
+**Required `.zshrc` change:** Add this snippet to your `~/.zshrc` so that restored Airport sessions automatically resume their Claude conversation:
+
+```bash
+# Auto-resume Claude Code sessions in Airport
+if [[ -n "$AIRPORT_CLAUDE_SESSION_ID" ]]; then
+  claude --resume "$AIRPORT_CLAUDE_SESSION_ID"
+fi
+```
+
+Without this, Airport will pass the session ID as an environment variable but nothing will act on it — sessions will start fresh instead of resuming.
+
 ### 2. Native Module Packaging Fixes
 
 The original `forge.config.ts` used `asar: true` which broke native modules (`node-pty`) at runtime. This fork:
