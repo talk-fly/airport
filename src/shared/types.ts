@@ -27,6 +27,7 @@ export interface TerminalSession {
   cwd: string;
   planFiles: PlanFile[];
   workspaceId: string;
+  claudeSession: boolean;
 }
 
 export type SessionStatus =
@@ -39,6 +40,8 @@ export interface PtyCreateOptions {
   cols: number;
   rows: number;
   cwd?: string;
+  workspaceName?: string;
+  claudeSessionId?: string;
 }
 
 export interface PtyDataEvent {
@@ -70,6 +73,7 @@ export interface SavedSession {
   colorIndex: number;
   backlog?: boolean;
   workspaceId?: string;
+  claudeSessionId?: string;
 }
 
 export interface SavedState {
@@ -83,6 +87,11 @@ export interface HookStatusEvent {
   sessionId: string;
   state: 'busy' | 'done';
   message: string;
+}
+
+export interface HookSessionEvent {
+  sessionId: string;
+  claudeSessionId: string;
 }
 
 export interface HookPlanEvent {
@@ -118,6 +127,7 @@ export interface AirportApi {
   loadState: () => Promise<SavedState | null>;
   onRequestSave: (callback: () => void) => () => void;
   onHookStatus: (callback: (event: HookStatusEvent) => void) => () => void;
+  onHookSession: (callback: (event: HookSessionEvent) => void) => () => void;
   onHookPlan: (callback: (event: HookPlanEvent) => void) => () => void;
   onSpawnRequest: (callback: (event: SpawnRequestEvent) => void) => () => void;
   discoverTerminals: () => Promise<ExternalTerminal[]>;

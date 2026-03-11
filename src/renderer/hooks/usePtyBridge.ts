@@ -25,6 +25,9 @@ interface HookState {
 }
 const hookStates = new Map<string, HookState>();
 
+// Claude Code session IDs captured from SessionStart hook
+const claudeSessionIds = new Map<string, string>();
+
 function stripAnsi(s: string): string {
   return s.replace(/\x1b[\[\]()][?!>]?[0-9;]*[a-zA-Z~]/g, '').replace(/\x1b[=>]/g, '').replace(/\r/g, '').trim();
 }
@@ -132,6 +135,11 @@ export function usePtyBridge() {
     // Listen for hook status updates from main process (file-based IPC)
     const unsubHook = window.airport.onHookStatus(({ sessionId, state, message }) => {
       hookStates.set(sessionId, { state, message });
+      // Mark as Claude session on first hook activity
+      const session = useTerminalStore.getState().sessions.find((s) => s.id === sessionId);
+      if (session && !session.claudeSession) {
+        useTerminalStore.getState().updateSession(sessionId, { claudeSession: true });
+      }
       if (state === 'busy') {
         setHookMessage(sessionId, message);
         setHookDone(sessionId, false);
@@ -152,10 +160,28 @@ export function usePtyBridge() {
       }
     });
 
+    // Listen for Claude session ID from SessionStart hook
+    const unsubSession = window.airport.onHookSession(({ sessionId, claudeSessionId }) => {
+      claudeSessionIds.set(sessionId, claudeSessionId);
+      // Mark as Claude session so UI (e.g. Remote button) appears
+      const s = useTerminalStore.getState().sessions.find((x) => x.id === sessionId);
+      if (s && !s.claudeSession) {
+        useTerminalStore.getState().updateSession(sessionId, { claudeSession: true });
+      }
+    });
+
     // Listen for plan file associations from main process (hook-based IPC)
     const unsubPlan = window.airport.onHookPlan(({ sessionId, planPath }) => {
       const name = planPath.split('/').pop() || planPath;
       setPlanFiles(sessionId, [{ name, path: planPath, modifiedAt: Date.now() }]);
+
+      // Auto-open the plan in markdown view if it's a .md file and belongs to the active session
+      if (planPath.endsWith('.md')) {
+        const { activeSessionId } = useTerminalStore.getState();
+        if (sessionId === activeSessionId) {
+          useTerminalStore.getState().viewPlan(sessionId, planPath);
+        }
+      }
     });
 
     const unsubExit = window.airport.pty.onExit(({ sessionId }) => {
@@ -166,6 +192,7 @@ export function usePtyBridge() {
       bellFlags.delete(sessionId);
       cachedCwds.delete(sessionId);
       hookStates.delete(sessionId);
+      claudeSessionIds.delete(sessionId);
     });
 
     // Polling: standby detection + git title updates
@@ -246,6 +273,7 @@ export function usePtyBridge() {
       unsubData();
       unsubSpawn();
       unsubHook();
+      unsubSession();
       unsubPlan();
       unsubExit();
       unsubSaveRequest();
@@ -253,7 +281,7 @@ export function usePtyBridge() {
     };
   }, []);
 
-  const createSession = async (options?: { cwd?: string; title?: string; customTitle?: boolean; buffer?: string; colorIndex?: number; workspaceId?: string }) => {
+  const createSession = async (options?: { cwd?: string; title?: string; customTitle?: boolean; buffer?: string; colorIndex?: number; workspaceId?: string; claudeSessionId?: string }) => {
     const { cols, rows } = mainDimsRef.current;
     // Inherit cwd from the active session when not explicitly provided
     let cwd = options?.cwd;
@@ -261,7 +289,10 @@ export function usePtyBridge() {
       const activeId = useTerminalStore.getState().activeSessionId;
       if (activeId) cwd = cachedCwds.get(activeId);
     }
-    const sessionId = await window.airport.pty.create({ cols, rows, cwd });
+    const store0 = useTerminalStore.getState();
+    const wsId = options?.workspaceId || store0.activeWorkspaceId;
+    const workspaceName = store0.workspaces.find((w) => w.id === wsId)?.name;
+    const sessionId = await window.airport.pty.create({ cols, rows, cwd, workspaceName, claudeSessionId: options?.claudeSessionId });
     createShadowTerminal(sessionId, cols, rows);
 
     // If restoring a buffer, write it to the shadow terminal
@@ -288,6 +319,7 @@ export function usePtyBridge() {
       cwd: cwd || '',
       planFiles: [],
       workspaceId: options?.workspaceId || store.activeWorkspaceId,
+      claudeSession: !!options?.claudeSessionId,
     });
     return sessionId;
   };
@@ -301,6 +333,7 @@ export function usePtyBridge() {
     bellFlags.delete(sessionId);
     cachedCwds.delete(sessionId);
     hookStates.delete(sessionId);
+    claudeSessionIds.delete(sessionId);
   };
 
   const setMainDimensions = (cols: number, rows: number) => {
@@ -316,15 +349,20 @@ export function usePtyBridge() {
 
   const saveAllSessions = () => {
     const { sessions, activeSessionId, workspaces, activeWorkspaceId } = useTerminalStore.getState();
-    const saved: SavedSession[] = sessions.map((session) => ({
-      title: session.title,
-      customTitle: session.customTitle,
-      cwd: cachedCwds.get(session.id) || '',
-      buffer: serializeShadowBuffer(session.id),
-      colorIndex: session.colorIndex,
-      backlog: session.backlog || undefined,
-      workspaceId: session.workspaceId,
-    }));
+    const saved: SavedSession[] = sessions.map((session) => {
+      const claudeSessionId = claudeSessionIds.get(session.id);
+      return {
+        title: session.title,
+        customTitle: session.customTitle,
+        cwd: cachedCwds.get(session.id) || '',
+        // Skip buffer for Claude sessions — resume loads conversation history
+        buffer: claudeSessionId ? '' : serializeShadowBuffer(session.id),
+        colorIndex: session.colorIndex,
+        backlog: session.backlog || undefined,
+        workspaceId: session.workspaceId,
+        claudeSessionId: claudeSessionId || undefined,
+      };
+    });
 
     const activeIndex = sessions.findIndex((s) => s.id === activeSessionId);
     window.airport.saveState({
@@ -351,9 +389,12 @@ export function usePtyBridge() {
         cwd: saved.cwd || undefined,
         title: saved.title,
         customTitle: saved.customTitle,
-        buffer: saved.buffer,
+        // Don't restore buffer for Claude sessions — resume loads history cleanly
+        buffer: saved.claudeSessionId ? undefined : saved.buffer,
         colorIndex: saved.colorIndex,
         workspaceId: saved.workspaceId || defaultWsId,
+        // Pass session ID as env var so .zshrc can use --resume
+        claudeSessionId: saved.claudeSessionId || undefined,
       });
       if (saved.backlog) {
         useTerminalStore.getState().updateSession(id, { backlog: true });

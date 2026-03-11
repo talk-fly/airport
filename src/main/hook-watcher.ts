@@ -23,6 +23,7 @@ export function startHookWatcher(
   server: WsServer
 ): () => void {
   const lastContent = new Map<string, string>();
+  const lastSessionContent = new Map<string, string>();
   const lastPlanContent = new Map<string, string>();
   // Track known plan files (by path) so we can detect new ones
   const knownPlanPaths = new Set<string>();
@@ -50,6 +51,24 @@ export function startHookWatcher(
     if (state === 'busy' || state === 'done') {
       server.broadcast(IPC.HOOK_STATUS, { sessionId, state, message });
     }
+  }
+
+  function processClaudeSessionFile(sessionId: string) {
+    const statusFile = ptyManager.getStatusFile(sessionId);
+    if (!statusFile) return;
+
+    const sessionFile = statusFile.replace(/\.status$/, '.claude-session');
+    let claudeSessionId: string;
+    try {
+      claudeSessionId = fs.readFileSync(sessionFile, 'utf-8').trim();
+    } catch {
+      return;
+    }
+
+    if (!claudeSessionId || claudeSessionId === lastSessionContent.get(sessionId)) return;
+    lastSessionContent.set(sessionId, claudeSessionId);
+
+    server.broadcast(IPC.HOOK_SESSION, { sessionId, claudeSessionId });
   }
 
   function processPlanFile(sessionId: string) {
@@ -110,6 +129,9 @@ export function startHookWatcher(
       if (filename && filename.endsWith('.status')) {
         const sessionId = filename.slice(0, -7); // strip '.status'
         processSession(sessionId);
+      } else if (filename && filename.endsWith('.claude-session')) {
+        const sessionId = filename.slice(0, -14); // strip '.claude-session'
+        processClaudeSessionFile(sessionId);
       } else if (filename && filename.endsWith('.plan')) {
         const sessionId = filename.slice(0, -5); // strip '.plan'
         processPlanFile(sessionId);
@@ -197,6 +219,7 @@ export function startHookWatcher(
   const interval = setInterval(() => {
     for (const sessionId of ptyManager.getAllSessionIds()) {
       processSession(sessionId);
+      processClaudeSessionFile(sessionId);
       processPlanFile(sessionId);
     }
     pollPlansDirectory();
@@ -206,6 +229,7 @@ export function startHookWatcher(
     clearInterval(interval);
     dirWatcher?.close();
     lastContent.clear();
+    lastSessionContent.clear();
     lastPlanContent.clear();
   };
 }

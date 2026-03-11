@@ -5,11 +5,18 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import { execSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { cpSync, existsSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+
+// Native/external modules that Vite marks as external but need to be
+// present in the packaged app's node_modules for runtime require().
+const NATIVE_DEPS = ['node-pty', 'ws'];
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: '{**/node-pty/**,**/*.node}',
+    },
     name: 'Airport',
   },
   hooks: {
@@ -19,6 +26,28 @@ const config: ForgeConfig = {
       execSync(`plutil -replace CFBundleIdentifier -string com.airport.dev "${plist}"`);
       execSync(`plutil -replace CFBundleDisplayName -string "Airport Dev" "${plist}"`);
       execSync(`plutil -replace CFBundleName -string "Airport Dev" "${plist}"`);
+    },
+    packageAfterCopy: async (_config, buildPath) => {
+      // The Vite plugin bundles everything except externals into .vite/build/.
+      // Native modules (node-pty) and pure-JS externals (ws) are left as
+      // require('...') calls — we need to copy them into the packaged app
+      // so Electron can resolve them at runtime.
+      const projectRoot = resolve(__dirname);
+      const srcNM = join(projectRoot, 'node_modules');
+      const destNM = join(buildPath, 'node_modules');
+
+      for (const dep of NATIVE_DEPS) {
+        const src = join(srcNM, dep);
+        if (existsSync(src)) {
+          cpSync(src, join(destNM, dep), { recursive: true });
+        }
+      }
+
+      // Also copy transitive native deps that node-pty may need
+      const nanAddon = join(srcNM, 'nan');
+      if (existsSync(nanAddon)) {
+        cpSync(nanAddon, join(destNM, 'nan'), { recursive: true });
+      }
     },
   },
   rebuildConfig: {},

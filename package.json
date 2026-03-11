@@ -24,7 +24,8 @@
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "prepublishOnly": "electron-forge package",
-    "build:standalone": "node esbuild.backend.mjs && npx vite build --config vite.standalone.config.ts"
+    "build:standalone": "node esbuild.backend.mjs && npx vite build --config vite.standalone.config.ts",
+    "install-local": "bash scripts/install-local.sh"
   },
   "keywords": [
     "electron",

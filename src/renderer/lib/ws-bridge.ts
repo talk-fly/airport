@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from '../../shared/ws-protocol';
-import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile } from '../../shared/types';
+import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile } from '../../shared/types';
 import { IPC } from '../../shared/ipc-channels';
 
 let ws: WebSocket;
@@ -107,6 +107,8 @@ export function createAirportApi(): AirportApi {
       invoke(IPC.PLAN_READ_FILE, filePath) as Promise<string>,
     onHookStatus: (callback: (event: HookStatusEvent) => void) =>
       on(IPC.HOOK_STATUS, callback as (data: unknown) => void),
+    onHookSession: (callback: (event: HookSessionEvent) => void) =>
+      on(IPC.HOOK_SESSION, callback as (data: unknown) => void),
     onHookPlan: (callback: (event: HookPlanEvent) => void) =>
       on(IPC.HOOK_PLAN, callback as (data: unknown) => void),
     onSpawnRequest: (callback: (event: SpawnRequestEvent) => void) =>

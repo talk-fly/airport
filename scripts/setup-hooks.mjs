@@ -13,10 +13,15 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
-const busyScript = join(projectRoot, 'hooks', 'airport-busy.sh');
-const doneScript = join(projectRoot, 'hooks', 'airport-done.sh');
+const isDev = process.env.AIRPORT_DEV === '1';
+const hooksBase = isDev ? join(projectRoot, 'hooks') : join(homedir(), '.airport', 'hooks');
+const busyScript = join(hooksBase, 'airport-busy.sh');
+const doneScript = join(hooksBase, 'airport-done.sh');
+
+const sessionStartScript = join(hooksBase, 'airport-session-start.sh');
 
 const DESIRED_HOOKS = {
+  SessionStart:     sessionStartScript,
   UserPromptSubmit: busyScript,
   PreToolUse:       busyScript,
   PostToolUse:      busyScript,
@@ -25,7 +30,8 @@ const DESIRED_HOOKS = {
 };
 
 const isAirportHook = (cmd) =>
-  cmd.endsWith('/hooks/airport-busy.sh') || cmd.endsWith('/hooks/airport-done.sh');
+  cmd.endsWith('/hooks/airport-busy.sh') || cmd.endsWith('/hooks/airport-done.sh') ||
+  cmd.endsWith('/hooks/airport-session-start.sh');
 
 const claudeDir = join(homedir(), '.claude');
 const settingsPath = join(claudeDir, 'settings.json');
