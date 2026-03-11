@@ -1,9 +1,9 @@
 export function TitleBar() {
   return (
     <div
+      className="titlebar-drag"
       style={{
         height: 38,
-        WebkitAppRegion: 'drag',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -11,7 +11,7 @@ export function TitleBar() {
         borderBottom: '1px solid #313244',
         flexShrink: 0,
         userSelect: 'none',
-      } as React.CSSProperties}
+      }}
     >
       <span
         style={{
