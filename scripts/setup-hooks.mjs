@@ -14,14 +14,12 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 const isDev = process.env.AIRPORT_DEV === '1';
+const hookExt = process.platform === 'win32' ? '.js' : '.sh';
 const hooksBase = isDev ? join(projectRoot, 'hooks') : join(homedir(), '.airport', 'hooks');
-const busyScript = join(hooksBase, 'airport-busy.sh');
-const doneScript = join(hooksBase, 'airport-done.sh');
-
-const sessionStartScript = join(hooksBase, 'airport-session-start.sh');
+const busyScript = join(hooksBase, `airport-busy${hookExt}`);
+const doneScript = join(hooksBase, `airport-done${hookExt}`);
 
 const DESIRED_HOOKS = {
-  SessionStart:     sessionStartScript,
   UserPromptSubmit: busyScript,
   PreToolUse:       busyScript,
   PostToolUse:      busyScript,
@@ -29,9 +27,11 @@ const DESIRED_HOOKS = {
   Notification:     doneScript,
 };
 
-const isAirportHook = (cmd) =>
-  cmd.endsWith('/hooks/airport-busy.sh') || cmd.endsWith('/hooks/airport-done.sh') ||
-  cmd.endsWith('/hooks/airport-session-start.sh');
+const isAirportHook = (cmd) => {
+  const normalized = cmd.replace(/\\/g, '/');
+  return normalized.endsWith('/hooks/airport-busy.sh') || normalized.endsWith('/hooks/airport-done.sh') ||
+         normalized.endsWith('/hooks/airport-busy.js') || normalized.endsWith('/hooks/airport-done.js');
+};
 
 const claudeDir = join(homedir(), '.claude');
 const settingsPath = join(claudeDir, 'settings.json');

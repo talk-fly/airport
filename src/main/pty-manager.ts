@@ -1,8 +1,20 @@
 import * as pty from 'node-pty';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { PtyCreateOptions } from '../shared/types';
+
+function getDefaultShell(): string {
+  if (process.platform === 'win32') {
+    for (const shell of ['pwsh.exe', 'powershell.exe', 'cmd.exe']) {
+      try { execFileSync('where', [shell], { stdio: 'ignore' }); return shell; }
+      catch { /* not found */ }
+    }
+    return 'cmd.exe';
+  }
+  return process.env.SHELL || '/bin/zsh';
+}
 
 interface PtySession {
   process: pty.IPty;
@@ -28,14 +40,25 @@ export class PtyManager {
   ): string {
     const id = `session-${this.nextId++}`;
     const statusFile = path.join(STATUS_DIR, `${id}.status`);
-    const shell = process.env.SHELL || '/bin/zsh';
+    const shell = getDefaultShell();
 
     const existingPath = process.env.PATH || '';
+    const home = process.env.HOME || process.env.USERPROFILE || (process.platform === 'win32' ? 'C:\\' : '/');
+    let cwd = options.cwd || home;
+    // On macOS, spawning a process whose CWD is inside a TCC-protected
+    // directory (~/Downloads, ~/Documents, ~/Desktop) triggers endless
+    // permission popups for ad-hoc signed apps.  Fall back to $HOME.
+    if (process.platform === 'darwin') {
+      const tccDirs = ['Downloads', 'Documents', 'Desktop'].map(d => path.join(home, d));
+      if (tccDirs.some(d => cwd === d || cwd.startsWith(d + '/'))) {
+        cwd = home;
+      }
+    }
     const proc = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
-      cwd: options.cwd || process.env.HOME || '/',
+      cwd,
       env: {
         ...Object.fromEntries(
           Object.entries(process.env).filter(([k]) => k !== 'CLAUDECODE')
@@ -48,7 +71,7 @@ export class PtyManager {
         AIRPORT_STATUS_FILE: statusFile,
         ...(options.workspaceName ? { AIRPORT_WORKSPACE_NAME: options.workspaceName } : {}),
         ...(options.claudeSessionId ? { AIRPORT_CLAUDE_SESSION_ID: options.claudeSessionId } : {}),
-        PATH: `${BIN_DIR}:${existingPath}`,
+        PATH: `${BIN_DIR}${path.delimiter}${existingPath}`,
       } as Record<string, string>,
     });
 
@@ -59,6 +82,19 @@ export class PtyManager {
     });
 
     this.sessions.set(id, { process: proc, id, statusFile });
+
+    // On Windows, inject a PowerShell prompt hook that writes CWD to a file
+    if (process.platform === 'win32' && (shell === 'pwsh.exe' || shell === 'powershell.exe')) {
+      const cwdFile = path.join(STATUS_DIR, `${id}.cwd`);
+      const escapedPath = cwdFile.replace(/\\/g, '\\\\');
+      const hookCmd = [
+        `function prompt { $PWD.Path | Out-File -Encoding utf8 -NoNewline '${escapedPath}'`,
+        `; return "PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) " }`,
+        `; cls`,
+      ].join('');
+      setTimeout(() => proc.write(hookCmd + '\r'), 500);
+    }
+
     return id;
   }
 
@@ -86,7 +122,9 @@ export class PtyManager {
     const session = this.sessions.get(sessionId);
     if (!session) return '';
     try {
-      return session.process.process;
+      const name = session.process.process;
+      // On Windows, node-pty returns full exe path — normalize to basename
+      return process.platform === 'win32' ? path.basename(name, '.exe') : name;
     } catch {
       return '';
     }
