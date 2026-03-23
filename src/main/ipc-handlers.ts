@@ -263,7 +263,7 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
   server.handle(IPC.CHANGELOG_READ, async (): Promise<string> => {
     const changelogPath = app.isPackaged
       ? path.join(process.resourcesPath, 'CHANGELOG.md')
-      : path.join(__dirname, '..', '..', '..', 'CHANGELOG.md');
+      : path.join(__dirname, '..', '..', 'CHANGELOG.md');
     try {
       return await fs.promises.readFile(changelogPath, 'utf-8');
     } catch {
