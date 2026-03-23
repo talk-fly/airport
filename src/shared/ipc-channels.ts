@@ -17,4 +17,7 @@ export const IPC = {
   DISCOVER_TERMINALS: 'terminals:discover',
   PLAN_GET_FILES: 'plan:getFiles',
   PLAN_READ_FILE: 'plan:readFile',
+  PICK_FOLDER: 'dialog:pickFolder',
+  CHANGELOG_READ: 'changelog:read',
+  WORKTREE_CREATE: 'worktree:create',
 } as const;

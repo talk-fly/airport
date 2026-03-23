@@ -1,3 +1,4 @@
+import { app, dialog } from 'electron';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -5,7 +6,7 @@ import fs from 'node:fs';
 import { PtyManager } from './pty-manager';
 import { WsServer } from './ws-server';
 import { IPC } from '../shared/ipc-channels';
-import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile } from '../shared/types';
+import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult } from '../shared/types';
 import { saveState, loadState } from './state-manager';
 
 const execFileAsync = promisify(execFile);
@@ -73,21 +74,21 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
 
   server.handle(IPC.GET_SESSION_INFO, async (sessionId: string): Promise<SessionInfo> => {
     const pid = ptyManager.getPid(sessionId);
-    if (!pid) return { cwd: '', gitRepo: '', gitBranch: '' };
+    if (!pid) return { cwd: '', gitRepo: '', gitBranch: '', isWorktree: false };
 
-    // Walk down to the deepest child so we pick up the cwd of the
-    // actual foreground process (e.g. claude running in a worktree),
-    // not the shell that Airport spawned.
-    const fgPid = await getDeepestDescendant(pid);
-
+    // Check for hook-reported CWD override (e.g. from EnterWorktree)
     let cwd = '';
-    if (process.platform === 'win32') {
-      const statusFile = ptyManager.getStatusFile(sessionId);
-      if (statusFile) {
-        const cwdFile = path.join(path.dirname(statusFile), `${sessionId}.cwd`);
-        try { cwd = fs.readFileSync(cwdFile, 'utf-8').trim(); } catch {}
-      }
-    } else {
+    const statusFile = ptyManager.getStatusFile(sessionId);
+    if (statusFile) {
+      const cwdFile = statusFile.replace(/\.status$/, '.cwd');
+      try {
+        cwd = fs.readFileSync(cwdFile, 'utf-8').trim();
+      } catch { /* no override */ }
+    }
+
+    // Fall back to walking the process tree and reading the foreground CWD
+    if (!cwd) {
+      const fgPid = await getDeepestDescendant(pid);
       try {
         const { stdout } = await execFileAsync('lsof', ['-a', '-p', String(fgPid), '-d', 'cwd', '-Fn']);
         const match = stdout.match(/\nn(.*)/);
@@ -95,23 +96,29 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
       } catch { /* ignore */ }
     }
 
-    if (!cwd) return { cwd: '', gitRepo: '', gitBranch: '' };
+    if (!cwd) return { cwd: '', gitRepo: '', gitBranch: '', isWorktree: false };
 
     let gitRepo = '';
     let gitBranch = '';
+    let isWorktree = false;
     // Use git -C instead of { cwd } to avoid spawning a child process
     // whose CWD is inside a macOS TCC-protected directory (~/Downloads,
     // ~/Documents, ~/Desktop), which triggers endless permission prompts.
     try {
-      // --git-common-dir returns the main repo's .git dir even inside a worktree
-      // (relative ".git" in a normal repo, absolute path in a worktree)
+      const { stdout: toplevel } = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--show-toplevel']);
+      const toplevelPath = toplevel.trim();
+      gitRepo = path.basename(toplevelPath);
+
+      // Compare toplevel with the main repo root to detect worktrees
       const { stdout: commonDir } = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--git-common-dir']);
-      gitRepo = path.basename(path.dirname(path.resolve(cwd, commonDir.trim())));
+      const mainRepoRoot = path.dirname(path.resolve(cwd, commonDir.trim()));
+      isWorktree = toplevelPath !== mainRepoRoot;
+
       const { stdout: branch } = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD']);
       gitBranch = branch.trim();
     } catch { /* not a git repo */ }
 
-    return { cwd, gitRepo, gitBranch };
+    return { cwd, gitRepo, gitBranch, isWorktree };
   });
 
   server.handle(IPC.DISCOVER_TERMINALS, async (): Promise<ExternalTerminal[]> => {
@@ -206,11 +213,80 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
     }
   });
 
+  server.handle(IPC.PICK_FOLDER, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select Workspace Folder',
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
   server.handle(IPC.STATE_SAVE, (state: SavedState) => {
     saveState(state);
   });
 
   server.handle(IPC.STATE_LOAD, () => {
     return loadState();
+  });
+
+  server.handle(IPC.WORKTREE_CREATE, async (request: WorktreeCreateRequest): Promise<WorktreeCreateResult> => {
+    const { cwd, taskDescription } = request;
+
+    // Resolve git repo root
+    let repoRoot: string;
+    try {
+      const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd });
+      repoRoot = stdout.trim();
+    } catch {
+      return { success: false, error: 'Current directory is not a git repository' };
+    }
+
+    // Validate staging branch exists
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', 'staging'], { cwd: repoRoot });
+    } catch {
+      return { success: false, error: "Branch 'staging' not found in this repository" };
+    }
+
+    // Convert task description to kebab-case branch name
+    const kebab = taskDescription
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 50);
+
+    if (!kebab) {
+      return { success: false, error: 'Invalid task description' };
+    }
+
+    const branchName = `worktree/${kebab}`;
+    const worktreePath = path.join(repoRoot, '.claude', 'worktrees', kebab);
+
+    // Create parent directory
+    await fs.promises.mkdir(path.dirname(worktreePath), { recursive: true });
+
+    // Create worktree
+    try {
+      await execFileAsync('git', ['worktree', 'add', worktreePath, '-b', branchName, 'staging'], { cwd: repoRoot });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message };
+    }
+
+    return { success: true, worktreePath, branchName };
+  });
+
+  server.handle(IPC.CHANGELOG_READ, async (): Promise<string> => {
+    const changelogPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'CHANGELOG.md')
+      : path.join(__dirname, '..', '..', 'CHANGELOG.md');
+    try {
+      return await fs.promises.readFile(changelogPath, 'utf-8');
+    } catch {
+      return '';
+    }
   });
 }

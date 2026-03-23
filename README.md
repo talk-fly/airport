@@ -25,7 +25,7 @@ The biggest addition: Airport now captures Claude Code **session IDs** via a new
 ```bash
 # Auto-resume Claude Code sessions in Airport
 if [[ -n "$AIRPORT_CLAUDE_SESSION_ID" ]]; then
-  claude --resume "$AIRPORT_CLAUDE_SESSION_ID"
+  claude --resume "$AIRPORT_CLAUDE_SESSION_ID" || claude
 fi
 ```
 

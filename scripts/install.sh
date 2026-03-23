@@ -11,7 +11,7 @@ if [ "$ARCH" != "arm64" ]; then
   echo "Error: Airport currently requires Apple Silicon (arm64). Intel Mac support coming soon." >&2
   exit 1
 fi
-REPO="tomer-van-cohen/airport"
+REPO="talk-fly/airport"
 
 echo "Fetching latest release..."
 LATEST=$(curl -sfL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)

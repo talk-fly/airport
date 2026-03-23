@@ -63,6 +63,11 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
           return false;
         }
       }
+      // Cmd+Enter → newline (same as Enter)
+      if (e.metaKey && e.key === 'Enter' && e.type === 'keydown') {
+        window.airport.pty.write(sessionId, '\r');
+        return false;
+      }
       return true;
     });
 
