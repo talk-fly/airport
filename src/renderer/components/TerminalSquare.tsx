@@ -25,6 +25,7 @@ export function TerminalSquare({ session, isActive, tabColor, onClick, onClose, 
   const viewPlan = useTerminalStore((s) => s.viewPlan);
   const setActiveSession = useTerminalStore((s) => s.setActiveSession);
   const folderName = !session.gitRepo && session.cwd ? session.cwd.split('/').filter(Boolean).pop() || '' : '';
+  const isWorktree = session.isWorktree;
 
   useEffect(() => {
     if (editing) {
@@ -174,9 +175,15 @@ export function TerminalSquare({ session, isActive, tabColor, onClick, onClose, 
                   minWidth: 0,
                 }}
               >
-                <svg width={9} height={9} viewBox="0 0 16 16" fill="#585b70" style={{ flexShrink: 0 }}>
-                  <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"/>
-                </svg>
+                {isWorktree ? (
+                  <svg width={9} height={9} viewBox="0 0 16 16" fill="#a6e3a1" style={{ flexShrink: 0 }}>
+                    <path d="M8 0a.75.75 0 0 1 .75.75v.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a4 4 0 0 1 3.5 3.97v.28a.75.75 0 0 1-1.5 0v-.28a2.5 2.5 0 0 0-2-2.45v5.53h2.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.5V6.72a2.5 2.5 0 0 0-2 2.45v.28a.75.75 0 0 1-1.5 0v-.28A4 4 0 0 1 7.25 5.2V2.75h-2.5a.75.75 0 0 1 0-1.5h2.5V.75A.75.75 0 0 1 8 0Z"/>
+                  </svg>
+                ) : (
+                  <svg width={9} height={9} viewBox="0 0 16 16" fill="#585b70" style={{ flexShrink: 0 }}>
+                    <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"/>
+                  </svg>
+                )}
                 <span style={{
                   fontSize: 12,
                   fontWeight: 600,

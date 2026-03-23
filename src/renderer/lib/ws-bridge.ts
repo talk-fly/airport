@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from '../../shared/ws-protocol';
-import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile } from '../../shared/types';
+import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult } from '../../shared/types';
 import { IPC } from '../../shared/ipc-channels';
 
 let ws: WebSocket;
@@ -101,6 +101,8 @@ export function createAirportApi(): AirportApi {
       on(IPC.STATE_REQUEST_SAVE, callback),
     discoverTerminals: () =>
       invoke(IPC.DISCOVER_TERMINALS) as Promise<ExternalTerminal[]>,
+    pickFolder: () =>
+      invoke(IPC.PICK_FOLDER) as Promise<string | null>,
     getPlanFiles: (cwd: string) =>
       invoke(IPC.PLAN_GET_FILES, cwd) as Promise<PlanFile[]>,
     readPlanFile: (filePath: string) =>
@@ -113,5 +115,13 @@ export function createAirportApi(): AirportApi {
       on(IPC.HOOK_PLAN, callback as (data: unknown) => void),
     onSpawnRequest: (callback: (event: SpawnRequestEvent) => void) =>
       on(IPC.SPAWN_REQUEST, callback as (data: unknown) => void),
+    readChangelog: () =>
+      invoke(IPC.CHANGELOG_READ) as Promise<string>,
+    onMenuWhatsNew: (callback: () => void) =>
+      on('menu:whats-new', callback as (data: unknown) => void),
+    onMenuNewWorktree: (callback: () => void) =>
+      on('menu:new-worktree', callback as (data: unknown) => void),
+    createWorktree: (request: WorktreeCreateRequest) =>
+      invoke(IPC.WORKTREE_CREATE, request) as Promise<WorktreeCreateResult>,
   };
 }

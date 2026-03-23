@@ -124,6 +124,7 @@ export class PtyManager {
     const session = this.sessions.get(sessionId);
     if (session) {
       try { fs.unlinkSync(session.statusFile); } catch { /* ignore */ }
+      try { fs.unlinkSync(session.statusFile.replace(/\.status$/, '.cwd')); } catch { /* ignore */ }
       this.sessions.delete(sessionId);
     }
   }

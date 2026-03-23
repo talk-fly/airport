@@ -23,7 +23,7 @@ interface TerminalStore {
   setSessionStandby: (id: string, isStandby: boolean) => void;
   setSessionProcessName: (id: string, processName: string) => void;
   setSessionTitle: (id: string, title: string, custom?: boolean) => void;
-  setSessionGitInfo: (id: string, gitRepo: string, gitBranch: string) => void;
+  setSessionGitInfo: (id: string, gitRepo: string, gitBranch: string, isWorktree?: boolean) => void;
   setSessionCwd: (id: string, cwd: string) => void;
   setHookMessage: (id: string, hookMessage: string) => void;
   setHookDone: (id: string, hookDone: boolean) => void;
@@ -40,7 +40,11 @@ interface TerminalStore {
   renameWorkspace: (id: string, name: string) => void;
   setActiveWorkspace: (id: string) => void;
   moveSessionToWorkspace: (sessionId: string, workspaceId: string) => void;
+  setWorkspaceFolder: (id: string, folderPath: string | undefined) => void;
   setWorkspaces: (workspaces: Workspace[], activeId: string) => void;
+  showChangelog: boolean;
+  openChangelog: () => void;
+  closeChangelog: () => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set) => ({
@@ -53,6 +57,7 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
   workspaces: [DEFAULT_WORKSPACE],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   workspaceActiveSessionIds: {},
+  showChangelog: false,
 
   addSession: (session) =>
     set((state) => ({
@@ -137,10 +142,10 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
       ),
     })),
 
-  setSessionGitInfo: (id, gitRepo, gitBranch) =>
+  setSessionGitInfo: (id, gitRepo, gitBranch, isWorktree) =>
     set((state) => ({
       sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, gitRepo, gitBranch } : s
+        s.id === id ? { ...s, gitRepo, gitBranch, isWorktree: isWorktree ?? s.isWorktree } : s
       ),
     })),
 
@@ -308,9 +313,27 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
       ),
     })),
 
+  setWorkspaceFolder: (id, folderPath) =>
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              folderPath,
+              ...(folderPath && /^Workspace \d+$/.test(w.name)
+                ? { name: folderPath.split('/').pop() || w.name }
+                : {}),
+            }
+          : w
+      ),
+    })),
+
   setWorkspaces: (workspaces, activeId) =>
     set(() => ({
       workspaces: workspaces.length > 0 ? workspaces : [DEFAULT_WORKSPACE],
       activeWorkspaceId: activeId || DEFAULT_WORKSPACE_ID,
     })),
+
+  openChangelog: () => set(() => ({ showChangelog: true })),
+  closeChangelog: () => set(() => ({ showChangelog: false })),
 }));

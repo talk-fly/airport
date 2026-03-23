@@ -2,12 +2,23 @@ import { useState, useRef, useEffect } from 'react';
 import { useTerminalStore } from '../store/terminal-store';
 
 export function WorkspaceDots() {
-  const { workspaces, activeWorkspaceId, setActiveWorkspace, renameWorkspace } = useTerminalStore();
+  const { workspaces, activeWorkspaceId, setActiveWorkspace, renameWorkspace, setWorkspaceFolder } = useTerminalStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+
+  const handleSetFolder = async () => {
+    const folder = await window.airport.pickFolder();
+    if (folder) {
+      setWorkspaceFolder(activeWorkspaceId, folder);
+    }
+  };
+
+  const handleClearFolder = () => {
+    setWorkspaceFolder(activeWorkspaceId, undefined);
+  };
 
   useEffect(() => {
     if (editing) {
@@ -104,6 +115,42 @@ export function WorkspaceDots() {
           }}
         >
           {activeWorkspace?.name || 'Workspace'}
+        </span>
+      )}
+
+      {/* Folder indicator */}
+      {activeWorkspace?.folderPath ? (
+        <span
+          onClick={handleSetFolder}
+          onContextMenu={(e) => { e.preventDefault(); handleClearFolder(); }}
+          style={{
+            fontSize: 10,
+            color: '#585b70',
+            fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+            cursor: 'pointer',
+            userSelect: 'none',
+            maxWidth: 120,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={`${activeWorkspace.folderPath}\nClick to change, right-click to clear`}
+        >
+          {activeWorkspace.folderPath.split('/').pop()}
+        </span>
+      ) : (
+        <span
+          onClick={handleSetFolder}
+          style={{
+            fontSize: 10,
+            color: '#45475a',
+            fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+          title="Set workspace folder"
+        >
+          + folder
         </span>
       )}
     </div>

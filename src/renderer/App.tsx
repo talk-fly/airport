@@ -4,7 +4,9 @@ import { MainTerminal } from './components/MainTerminal';
 import { SessionControls } from './components/SessionControls';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { PlanReviewPanel } from './components/PlanReviewPanel';
+import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { WorkspaceDots } from './components/WorkspaceDots';
+import { WorktreePrompt } from './components/WorktreePrompt';
 import { WorkspaceContainer } from './components/WorkspaceContainer';
 import { useTerminalStore } from './store/terminal-store';
 import { usePtyBridge } from './hooks/usePtyBridge';
@@ -14,16 +16,34 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 600;
 
 export function App() {
-  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, workspaces, activeWorkspaceId, setActiveWorkspace } = useTerminalStore();
+  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, workspaces, activeWorkspaceId, setActiveWorkspace, showChangelog, openChangelog } = useTerminalStore();
   const workspaceEmpty = sessions.length === 0 || !sessions.some((s) => s.workspaceId === activeWorkspaceId && !s.backlog);
   const { createSession, closeSession, setMainDimensions, restoreState, clearTerminal } = usePtyBridge();
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [showWorktreePrompt, setShowWorktreePrompt] = useState(false);
+  const [worktreeError, setWorktreeError] = useState('');
+  const [worktreeLoading, setWorktreeLoading] = useState(false);
   const dragging = useRef(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Restore previous state (no auto-create — show onboarding if empty)
   useEffect(() => {
     restoreState();
+  }, []);
+
+  // Listen for Help > What's New menu
+  useEffect(() => {
+    return window.airport.onMenuWhatsNew(() => {
+      openChangelog();
+    });
+  }, [openChangelog]);
+
+  // Listen for Session > New Worktree menu
+  useEffect(() => {
+    return window.airport.onMenuNewWorktree(() => {
+      setWorktreeError('');
+      setShowWorktreePrompt(true);
+    });
   }, []);
 
   const handleNewSession = useCallback(async () => {
@@ -45,6 +65,43 @@ export function App() {
     }
     if (firstId) {
       useTerminalStore.getState().setActiveSession(firstId);
+    }
+  }, [createSession]);
+
+  const handleCreateWorktree = useCallback(async (taskDescription: string) => {
+    // Get cwd from active workspace folder or active session
+    const store = useTerminalStore.getState();
+    const workspace = store.workspaces.find((w) => w.id === store.activeWorkspaceId);
+    const activeSession = store.sessions.find((s) => s.id === store.activeSessionId);
+    const cwd = workspace?.folderPath || activeSession?.cwd;
+
+    if (!cwd) {
+      setWorktreeError('Open a terminal in a git repository first');
+      return;
+    }
+
+    setWorktreeLoading(true);
+    setWorktreeError('');
+
+    try {
+      const result = await window.airport.createWorktree({ cwd, taskDescription });
+
+      if (!result.success) {
+        setWorktreeError(result.error || 'Failed to create worktree');
+        setWorktreeLoading(false);
+        return;
+      }
+
+      setShowWorktreePrompt(false);
+      setWorktreeLoading(false);
+
+      // Create a session in the current workspace — git polling will
+      // auto-detect the branch and set the title to repo/worktree/branch-name
+      const sessionId = await createSession({ cwd: result.worktreePath! });
+      useTerminalStore.getState().setActiveSession(sessionId);
+    } catch (err) {
+      setWorktreeError(err instanceof Error ? err.message : 'Unexpected error');
+      setWorktreeLoading(false);
     }
   }, [createSession]);
 
@@ -82,6 +139,13 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key === 'n') {
+        e.preventDefault();
+        setWorktreeError('');
+        setShowWorktreePrompt(true);
+        return;
+      }
+
       if (e.metaKey && e.key === 't') {
         e.preventDefault();
         handleNewSession();
@@ -123,6 +187,25 @@ export function App() {
         return;
       }
 
+      // Workspace switching: Cmd+Right / Cmd+Left
+      if (e.metaKey && !e.ctrlKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        const idx = workspaces.findIndex((w) => w.id === activeWorkspaceId);
+        if (workspaces.length > 1) {
+          setActiveWorkspace(workspaces[(idx + 1) % workspaces.length].id);
+        }
+        return;
+      }
+
+      if (e.metaKey && !e.ctrlKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const idx = workspaces.findIndex((w) => w.id === activeWorkspaceId);
+        if (workspaces.length > 1) {
+          setActiveWorkspace(workspaces[(idx - 1 + workspaces.length) % workspaces.length].id);
+        }
+        return;
+      }
+
       // Session shortcuts scoped to active workspace
       const visible = sessions.filter((s) => !s.backlog && s.workspaceId === activeWorkspaceId);
 
@@ -145,6 +228,25 @@ export function App() {
       }
 
       if (e.metaKey && e.key === '[') {
+        e.preventDefault();
+        const idx = visible.findIndex((s) => s.id === activeSessionId);
+        if (visible.length > 0) {
+          setActiveSession(visible[(idx - 1 + visible.length) % visible.length].id);
+        }
+        return;
+      }
+
+      // Session switching: Cmd+Down / Cmd+Up
+      if (e.metaKey && e.key === 'ArrowDown') {
+        e.preventDefault();
+        const idx = visible.findIndex((s) => s.id === activeSessionId);
+        if (visible.length > 0) {
+          setActiveSession(visible[(idx + 1) % visible.length].id);
+        }
+        return;
+      }
+
+      if (e.metaKey && e.key === 'ArrowUp') {
         e.preventDefault();
         const idx = visible.findIndex((s) => s.id === activeSessionId);
         if (visible.length > 0) {
@@ -198,7 +300,9 @@ export function App() {
         }}
       >
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}>
-          {workspaceEmpty ? (
+          {showChangelog ? (
+            <WhatsNewPanel />
+          ) : workspaceEmpty ? (
             <OnboardingScreen
               onNewSession={handleNewSession}
               onAdoptTerminals={handleAdoptTerminals}
@@ -256,6 +360,15 @@ export function App() {
           <SessionControls onNewSession={handleNewSession} onAdoptTerminals={handleAdoptTerminals} />
         </div>
       </div>
+
+      {showWorktreePrompt && (
+        <WorktreePrompt
+          onSubmit={handleCreateWorktree}
+          onCancel={() => { setShowWorktreePrompt(false); setWorktreeLoading(false); }}
+          error={worktreeError}
+          loading={worktreeLoading}
+        />
+      )}
     </div>
   );
 }

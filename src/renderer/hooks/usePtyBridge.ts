@@ -248,7 +248,7 @@ export function usePtyBridge() {
               setSessionTitle(session.id, gitTitle);
             }
             if (session.gitRepo !== info.gitRepo || session.gitBranch !== info.gitBranch) {
-              setSessionGitInfo(session.id, info.gitRepo, info.gitBranch);
+              setSessionGitInfo(session.id, info.gitRepo, info.gitBranch, info.isWorktree);
             }
           } else if (info.cwd && (session.gitRepo || session.gitBranch)) {
             // Only clear git info when we successfully resolved a cwd but
@@ -283,15 +283,20 @@ export function usePtyBridge() {
 
   const createSession = async (options?: { cwd?: string; title?: string; customTitle?: boolean; buffer?: string; colorIndex?: number; workspaceId?: string; claudeSessionId?: string }) => {
     const { cols, rows } = mainDimsRef.current;
-    // Inherit cwd from the active session when not explicitly provided
-    let cwd = options?.cwd;
-    if (!cwd) {
-      const activeId = useTerminalStore.getState().activeSessionId;
-      if (activeId) cwd = cachedCwds.get(activeId);
-    }
+    // Inherit cwd from workspace folder or active session
     const store0 = useTerminalStore.getState();
     const wsId = options?.workspaceId || store0.activeWorkspaceId;
-    const workspaceName = store0.workspaces.find((w) => w.id === wsId)?.name;
+    const workspace = store0.workspaces.find((w) => w.id === wsId);
+    let cwd = options?.cwd;
+    if (!cwd) {
+      if (workspace?.folderPath) {
+        cwd = workspace.folderPath;
+      } else {
+        const activeId = store0.activeSessionId;
+        if (activeId) cwd = cachedCwds.get(activeId);
+      }
+    }
+    const workspaceName = workspace?.name;
     const sessionId = await window.airport.pty.create({ cols, rows, cwd, workspaceName, claudeSessionId: options?.claudeSessionId });
     createShadowTerminal(sessionId, cols, rows);
 
@@ -314,6 +319,7 @@ export function usePtyBridge() {
       waitingQuestion: '',
       gitRepo: '',
       gitBranch: '',
+      isWorktree: false,
       colorIndex: options?.colorIndex ?? store.nextColorIndex,
       backlog: false,
       cwd: cwd || '',
@@ -321,6 +327,14 @@ export function usePtyBridge() {
       workspaceId: options?.workspaceId || store.activeWorkspaceId,
       claudeSession: !!options?.claudeSessionId,
     });
+
+    // Auto-launch claude in workspace-folder sessions
+    if (workspace?.folderPath && !options?.claudeSessionId && !options?.buffer) {
+      setTimeout(() => {
+        window.airport.pty.write(sessionId, 'claude\n');
+      }, 300);
+    }
+
     return sessionId;
   };
 
