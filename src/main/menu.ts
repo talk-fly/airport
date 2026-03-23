@@ -28,6 +28,13 @@ export function setupMenu(server: WsServer): void {
           },
         },
         {
+          label: 'New Worktree',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            server.broadcast('menu:new-worktree');
+          },
+        },
+        {
           label: 'Close Session',
           accelerator: 'CmdOrCtrl+W',
           click: () => {
@@ -116,6 +123,17 @@ export function setupMenu(server: WsServer): void {
         { role: 'zoom' },
         { type: 'separator' },
         { role: 'front' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: "What's New",
+          click: () => {
+            server.broadcast('menu:whats-new');
+          },
+        },
       ],
     },
   ];

@@ -57,6 +57,11 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
     // Let Ctrl+Tab bubble to the window handler
     term.attachCustomKeyEventHandler((e) => {
       if (e.ctrlKey && e.key === 'Tab') return false;
+      // Cmd+Enter → newline (same as Enter)
+      if (e.metaKey && e.key === 'Enter' && e.type === 'keydown') {
+        window.airport.pty.write(sessionId, '\r');
+        return false;
+      }
       return true;
     });
 

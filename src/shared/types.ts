@@ -7,6 +7,7 @@ export interface PlanFile {
 export interface Workspace {
   id: string;
   name: string;
+  folderPath?: string;
 }
 
 export interface TerminalSession {
@@ -22,6 +23,7 @@ export interface TerminalSession {
   waitingQuestion: string;
   gitRepo: string;
   gitBranch: string;
+  isWorktree: boolean;
   colorIndex: number;
   backlog: boolean;
   cwd: string;
@@ -63,6 +65,7 @@ export interface SessionInfo {
   cwd: string;
   gitRepo: string;
   gitBranch: string;
+  isWorktree: boolean;
 }
 
 export interface SavedSession {
@@ -105,6 +108,18 @@ export interface SpawnRequestEvent {
   command?: string;
 }
 
+export interface WorktreeCreateRequest {
+  cwd: string;
+  taskDescription: string;
+}
+
+export interface WorktreeCreateResult {
+  success: boolean;
+  worktreePath?: string;
+  branchName?: string;
+  error?: string;
+}
+
 export interface ExternalTerminal {
   pid: number;
   tty: string;
@@ -131,8 +146,13 @@ export interface AirportApi {
   onHookPlan: (callback: (event: HookPlanEvent) => void) => () => void;
   onSpawnRequest: (callback: (event: SpawnRequestEvent) => void) => () => void;
   discoverTerminals: () => Promise<ExternalTerminal[]>;
+  pickFolder: () => Promise<string | null>;
   getPlanFiles: (cwd: string) => Promise<PlanFile[]>;
   readPlanFile: (path: string) => Promise<string>;
+  readChangelog: () => Promise<string>;
+  onMenuWhatsNew: (callback: () => void) => () => void;
+  onMenuNewWorktree: (callback: () => void) => () => void;
+  createWorktree: (request: WorktreeCreateRequest) => Promise<WorktreeCreateResult>;
 }
 
 declare global {
