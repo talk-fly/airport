@@ -6,6 +6,7 @@ import { OnboardingScreen } from './components/OnboardingScreen';
 import { PlanReviewPanel } from './components/PlanReviewPanel';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { WorkspaceDots } from './components/WorkspaceDots';
+import { UpdateDialog } from './components/UpdateDialog';
 import { WorktreePrompt } from './components/WorktreePrompt';
 import { WorkspaceContainer } from './components/WorkspaceContainer';
 import { useTerminalStore } from './store/terminal-store';
@@ -16,7 +17,7 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 600;
 
 export function App() {
-  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, workspaces, activeWorkspaceId, setActiveWorkspace, showChangelog, openChangelog } = useTerminalStore();
+  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, workspaces, activeWorkspaceId, setActiveWorkspace, showChangelog, openChangelog, showUpdateDialog, openUpdateDialog, closeUpdateDialog } = useTerminalStore();
   const workspaceEmpty = sessions.length === 0 || !sessions.some((s) => s.workspaceId === activeWorkspaceId && !s.backlog);
   const { createSession, closeSession, setMainDimensions, restoreState, clearTerminal } = usePtyBridge();
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -37,6 +38,13 @@ export function App() {
       openChangelog();
     });
   }, [openChangelog]);
+
+  // Listen for Help > Check for Updates menu
+  useEffect(() => {
+    return window.airport.onMenuCheckUpdates(() => {
+      openUpdateDialog();
+    });
+  }, [openUpdateDialog]);
 
   // Listen for Session > New Worktree menu
   useEffect(() => {
@@ -360,6 +368,10 @@ export function App() {
           <SessionControls onNewSession={handleNewSession} onAdoptTerminals={handleAdoptTerminals} />
         </div>
       </div>
+
+      {showUpdateDialog && (
+        <UpdateDialog onClose={closeUpdateDialog} />
+      )}
 
       {showWorktreePrompt && (
         <WorktreePrompt

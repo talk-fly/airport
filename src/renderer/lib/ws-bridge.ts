@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from '../../shared/ws-protocol';
-import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult } from '../../shared/types';
+import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult } from '../../shared/types';
 import { IPC } from '../../shared/ipc-channels';
 
 let ws: WebSocket;
@@ -123,5 +123,11 @@ export function createAirportApi(): AirportApi {
       on('menu:new-worktree', callback as (data: unknown) => void),
     createWorktree: (request: WorktreeCreateRequest) =>
       invoke(IPC.WORKTREE_CREATE, request) as Promise<WorktreeCreateResult>,
+    checkForUpdates: () =>
+      invoke(IPC.UPDATE_CHECK) as Promise<UpdateCheckResult>,
+    installUpdate: (downloadUrl: string) =>
+      invoke(IPC.UPDATE_INSTALL, downloadUrl) as Promise<void>,
+    onMenuCheckUpdates: (callback: () => void) =>
+      on('menu:check-updates', callback as (data: unknown) => void),
   };
 }

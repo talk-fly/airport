@@ -20,4 +20,6 @@ export const IPC = {
   PICK_FOLDER: 'dialog:pickFolder',
   CHANGELOG_READ: 'changelog:read',
   WORKTREE_CREATE: 'worktree:create',
+  UPDATE_CHECK: 'updates:check',
+  UPDATE_INSTALL: 'updates:install',
 } as const;

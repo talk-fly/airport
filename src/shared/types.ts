@@ -120,6 +120,14 @@ export interface WorktreeCreateResult {
   error?: string;
 }
 
+export interface UpdateCheckResult {
+  available: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  changelog?: string;
+  downloadUrl?: string;
+}
+
 export interface ExternalTerminal {
   pid: number;
   tty: string;
@@ -153,6 +161,9 @@ export interface AirportApi {
   onMenuWhatsNew: (callback: () => void) => () => void;
   onMenuNewWorktree: (callback: () => void) => () => void;
   createWorktree: (request: WorktreeCreateRequest) => Promise<WorktreeCreateResult>;
+  checkForUpdates: () => Promise<UpdateCheckResult>;
+  installUpdate: (downloadUrl: string) => Promise<void>;
+  onMenuCheckUpdates: (callback: () => void) => () => void;
 }
 
 declare global {

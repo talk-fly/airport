@@ -134,6 +134,12 @@ export function setupMenu(server: WsServer): void {
             server.broadcast('menu:whats-new');
           },
         },
+        {
+          label: 'Check for Updates…',
+          click: () => {
+            server.broadcast('menu:check-updates');
+          },
+        },
       ],
     },
   ];

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { PtyManager } from './pty-manager';
 import { WsServer } from './ws-server';
 import { IPC } from '../shared/ipc-channels';
-import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult } from '../shared/types';
+import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult } from '../shared/types';
 import { saveState, loadState } from './state-manager';
 
 const execFileAsync = promisify(execFile);
@@ -258,6 +258,80 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
     }
 
     return { success: true, worktreePath, branchName };
+  });
+
+  const REPO = 'talk-fly/airport';
+
+  server.handle(IPC.UPDATE_CHECK, async (): Promise<UpdateCheckResult> => {
+    const currentVersion = app.getVersion();
+    try {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+      if (!res.ok) return { available: false, currentVersion, latestVersion: currentVersion };
+      const release = await res.json() as { tag_name: string; assets: Array<{ name: string; browser_download_url: string }> };
+      const latestVersion = release.tag_name.replace(/^v/, '');
+      if (latestVersion === currentVersion) {
+        return { available: false, currentVersion, latestVersion };
+      }
+
+      // Fetch CHANGELOG.md from the latest release tag to show what's new
+      let changelog = '';
+      try {
+        const changelogRes = await fetch(`https://raw.githubusercontent.com/${REPO}/${release.tag_name}/CHANGELOG.md`);
+        if (changelogRes.ok) {
+          const fullChangelog = await changelogRes.text();
+          // Extract entries between latest and current version
+          const currentHeader = `## ${currentVersion}`;
+          const latestIdx = fullChangelog.indexOf(`## ${latestVersion}`);
+          const currentIdx = fullChangelog.indexOf(currentHeader);
+          if (latestIdx !== -1 && currentIdx !== -1 && latestIdx < currentIdx) {
+            changelog = fullChangelog.slice(latestIdx, currentIdx).trim();
+          } else if (latestIdx !== -1) {
+            // Current version not in changelog — show everything from latest
+            changelog = fullChangelog.slice(latestIdx).trim();
+          }
+        }
+      } catch { /* ignore changelog fetch failures */ }
+
+      const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+      const asset = release.assets.find((a) => a.name === `Airport-${arch}.tar.gz`);
+
+      return {
+        available: true,
+        currentVersion,
+        latestVersion,
+        changelog: changelog || undefined,
+        downloadUrl: asset?.browser_download_url,
+      };
+    } catch {
+      return { available: false, currentVersion, latestVersion: currentVersion };
+    }
+  });
+
+  server.handle(IPC.UPDATE_INSTALL, async (downloadUrl: string): Promise<void> => {
+    const os = await import('node:os');
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'airport-update-'));
+    const tarPath = path.join(tmpDir, 'airport.tar.gz');
+
+    // Download
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await fs.promises.writeFile(tarPath, buffer);
+
+    // Extract
+    await execFileAsync('tar', ['xzf', tarPath, '-C', tmpDir]);
+
+    // Replace /Applications/Airport.app
+    const appPath = '/Applications/Airport.app';
+    try { await execFileAsync('rm', ['-rf', appPath]); } catch { /* ignore */ }
+    await execFileAsync('mv', [path.join(tmpDir, 'Airport.app'), appPath]);
+
+    // Clean up temp
+    await execFileAsync('rm', ['-rf', tmpDir]);
+
+    // Relaunch
+    app.relaunch({ execPath: path.join(appPath, 'Contents', 'MacOS', 'Airport') });
+    app.quit();
   });
 
   server.handle(IPC.CHANGELOG_READ, async (): Promise<string> => {

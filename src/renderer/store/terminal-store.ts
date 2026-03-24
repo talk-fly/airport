@@ -45,6 +45,9 @@ interface TerminalStore {
   showChangelog: boolean;
   openChangelog: () => void;
   closeChangelog: () => void;
+  showUpdateDialog: boolean;
+  openUpdateDialog: () => void;
+  closeUpdateDialog: () => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set) => ({
@@ -58,6 +61,7 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   workspaceActiveSessionIds: {},
   showChangelog: false,
+  showUpdateDialog: false,
 
   addSession: (session) =>
     set((state) => ({
@@ -336,4 +340,7 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
 
   openChangelog: () => set(() => ({ showChangelog: true })),
   closeChangelog: () => set(() => ({ showChangelog: false })),
+
+  openUpdateDialog: () => set(() => ({ showUpdateDialog: true })),
+  closeUpdateDialog: () => set(() => ({ showUpdateDialog: false })),
 }));
