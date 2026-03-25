@@ -1,5 +1,9 @@
 # What's New in Airport
 
+## 1.8.0
+
+- **Check for Updates** — check for and install updates from Help > Check for Updates
+
 ## 1.7.0
 
 - **Worktree creation** — create git worktrees from a prompt (Cmd+N or Session > New Worktree), branches from staging
