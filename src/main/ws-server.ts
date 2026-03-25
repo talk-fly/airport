@@ -13,6 +13,7 @@ export class WsServer {
   private listeners = new Map<string, Listener>();
   private clients = new Set<WebSocket>();
   private port = 0;
+  private heartbeatInterval: ReturnType<typeof setInterval> | undefined;
 
   handle(channel: string, fn: Handler): void {
     this.handlers.set(channel, fn);
@@ -44,10 +45,13 @@ export class WsServer {
         this.port = addr.port;
       }
       this.wss.on('connection', (ws) => {
+        (ws as any).isAlive = true;
+        ws.on('pong', () => { (ws as any).isAlive = true; });
         this.clients.add(ws);
         ws.on('close', () => this.clients.delete(ws));
         ws.on('message', (raw) => this.onMessage(ws, raw.toString()));
       });
+      this.startHeartbeat();
       return Promise.resolve();
     }
 
@@ -65,20 +69,42 @@ export class WsServer {
       this.wss.on('error', reject);
 
       this.wss.on('connection', (ws) => {
+        (ws as any).isAlive = true;
+        ws.on('pong', () => { (ws as any).isAlive = true; });
         this.clients.add(ws);
         ws.on('close', () => this.clients.delete(ws));
         ws.on('message', (raw) => this.onMessage(ws, raw.toString()));
       });
+
+      this.startHeartbeat();
     });
   }
 
   close(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = undefined;
+    }
     for (const ws of this.clients) {
       ws.close();
     }
     this.clients.clear();
     this.wss?.close();
     this.wss = null;
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      for (const ws of this.clients) {
+        if ((ws as any).isAlive === false) {
+          ws.terminate();
+          this.clients.delete(ws);
+          continue;
+        }
+        (ws as any).isAlive = false;
+        ws.ping();
+      }
+    }, 15_000);
   }
 
   private async onMessage(ws: WebSocket, raw: string) {

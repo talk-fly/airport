@@ -3,16 +3,64 @@ import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStat
 import { IPC } from '../../shared/ipc-channels';
 
 let ws: WebSocket;
+let wsPort = 0;
+let connected = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let reconnectAttempts = 0;
+const MAX_BACKOFF = 10_000;
+
 const pending = new Map<string, { resolve: (data: unknown) => void; reject: (err: Error) => void }>();
 const listeners = new Map<string, Set<(data: unknown) => void>>();
 
+function rejectAllPending() {
+  for (const [, p] of pending) {
+    p.reject(new Error('WebSocket connection lost'));
+  }
+  pending.clear();
+}
+
+function reconnect() {
+  if (reconnectTimer) return;
+  connected = false;
+  rejectAllPending();
+
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_BACKOFF);
+  reconnectAttempts++;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined;
+    try {
+      ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+      ws.onopen = () => {
+        connected = true;
+        reconnectAttempts = 0;
+      };
+      ws.onclose = () => {
+        connected = false;
+        reconnect();
+      };
+      ws.onerror = () => {
+        // onclose will fire after onerror, which triggers reconnect
+      };
+      ws.onmessage = onMessage;
+    } catch {
+      reconnect();
+    }
+  }, delay);
+}
+
 function send(type: string, args: unknown[]): void {
+  if (!connected || ws.readyState !== WebSocket.OPEN) return;
   const msg: ClientMessage = { type, args };
   ws.send(JSON.stringify(msg));
 }
 
 function invoke(type: string, ...args: unknown[]): Promise<unknown> {
   return new Promise((resolve, reject) => {
+    if (!connected || ws.readyState !== WebSocket.OPEN) {
+      reject(new Error('WebSocket not connected'));
+      return;
+    }
     const id = crypto.randomUUID();
     pending.set(id, { resolve, reject });
     const msg: ClientMessage = { type, id, args };
@@ -59,11 +107,32 @@ function onMessage(event: MessageEvent) {
 }
 
 export function connect(port: number): Promise<void> {
+  wsPort = port;
   return new Promise((resolve, reject) => {
     ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    ws.onopen = () => resolve();
+    ws.onopen = () => {
+      connected = true;
+      reconnectAttempts = 0;
+      resolve();
+    };
     ws.onerror = (e) => reject(e);
+    ws.onclose = () => {
+      connected = false;
+      reconnect();
+    };
     ws.onmessage = onMessage;
+  });
+}
+
+// Proactively check connection health when page becomes visible (after sleep/wake)
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wsPort > 0) {
+      if (!connected || ws.readyState !== WebSocket.OPEN) {
+        reconnectAttempts = 0; // reset backoff for immediate retry on wake
+        reconnect();
+      }
+    }
   });
 }
 

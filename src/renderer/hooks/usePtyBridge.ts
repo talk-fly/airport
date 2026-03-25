@@ -28,6 +28,9 @@ const hookStates = new Map<string, HookState>();
 // Claude Code session IDs captured from SessionStart hook
 const claudeSessionIds = new Map<string, string>();
 
+// Track which plan paths have been auto-opened per session (so we only open once)
+const autoOpenedPlans = new Map<string, string>();
+
 function stripAnsi(s: string): string {
   return s.replace(/\x1b[\[\]()][?!>]?[0-9;]*[a-zA-Z~]/g, '').replace(/\x1b[=>]/g, '').replace(/\r/g, '').trim();
 }
@@ -172,11 +175,18 @@ export function usePtyBridge() {
 
     // Listen for plan file associations from main process (hook-based IPC)
     const unsubPlan = window.airport.onHookPlan(({ sessionId, planPath }) => {
+      // Empty planPath = revoke plan badge (dedup from hook-watcher)
+      if (!planPath) {
+        setPlanFiles(sessionId, []);
+        return;
+      }
+
       const name = planPath.split('/').pop() || planPath;
       setPlanFiles(sessionId, [{ name, path: planPath, modifiedAt: Date.now() }]);
 
-      // Auto-open the plan in markdown view if it's a .md file and belongs to the active session
-      if (planPath.endsWith('.md')) {
+      // Auto-open the plan in markdown view once per plan path per session
+      if (planPath.endsWith('.md') && autoOpenedPlans.get(sessionId) !== planPath) {
+        autoOpenedPlans.set(sessionId, planPath);
         const { activeSessionId } = useTerminalStore.getState();
         if (sessionId === activeSessionId) {
           useTerminalStore.getState().viewPlan(sessionId, planPath);
@@ -193,6 +203,7 @@ export function usePtyBridge() {
       cachedCwds.delete(sessionId);
       hookStates.delete(sessionId);
       claudeSessionIds.delete(sessionId);
+      autoOpenedPlans.delete(sessionId);
     });
 
     // Polling: standby detection + git title updates
@@ -269,6 +280,15 @@ export function usePtyBridge() {
       saveAllSessions();
     });
 
+    // Auto-save state periodically so refresh/crash doesn't lose much
+    const autoSaveInterval = setInterval(() => {
+      saveAllSessions();
+    }, 30_000);
+
+    // Save on beforeunload (fires on Cmd+R / reload)
+    const handleBeforeUnload = () => { saveAllSessions(); };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       unsubData();
       unsubSpawn();
@@ -277,6 +297,8 @@ export function usePtyBridge() {
       unsubPlan();
       unsubExit();
       unsubSaveRequest();
+      clearInterval(autoSaveInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
@@ -348,6 +370,7 @@ export function usePtyBridge() {
     cachedCwds.delete(sessionId);
     hookStates.delete(sessionId);
     claudeSessionIds.delete(sessionId);
+    autoOpenedPlans.delete(sessionId);
   };
 
   const setMainDimensions = (cols: number, rows: number) => {

@@ -1,5 +1,6 @@
-import { app, Menu } from 'electron';
+import { app, BaseWindow, BrowserWindow, Menu } from 'electron';
 import { WsServer } from './ws-server';
+import { IPC } from '../shared/ipc-channels';
 
 export function setupMenu(server: WsServer): void {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -105,8 +106,26 @@ export function setupMenu(server: WsServer): void {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
+        {
+          label: 'Reload',
+          accelerator: 'CmdOrCtrl+R',
+          click: (_menuItem: Electron.MenuItem, win?: BaseWindow) => {
+            server.broadcast(IPC.STATE_REQUEST_SAVE);
+            setTimeout(() => {
+              if (win instanceof BrowserWindow) win.webContents.reload();
+            }, 300);
+          },
+        },
+        {
+          label: 'Force Reload',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: (_menuItem: Electron.MenuItem, win?: BaseWindow) => {
+            server.broadcast(IPC.STATE_REQUEST_SAVE);
+            setTimeout(() => {
+              if (win instanceof BrowserWindow) win.webContents.reloadIgnoringCache();
+            }, 300);
+          },
+        },
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'resetZoom' },

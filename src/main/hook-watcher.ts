@@ -149,9 +149,10 @@ export function startHookWatcher(
     // Directory watch unavailable, rely on polling only
   }
 
-  // Poll ~/.claude/plans/ for new plan files created by Claude Code's plan mode.
-  // Plan mode writes files internally (not via the Write tool), so the hook-based
-  // detection alone won't catch them. This polling assigns new plans to busy sessions.
+  // Poll ~/.claude/plans/ to track known plan files. Assignment is handled
+  // exclusively by the sidecar .plan file mechanism (processPlanFile) which
+  // is per-session and authoritative. This poll only keeps knownPlanPaths
+  // up to date so the set doesn't miss files.
   function pollPlansDirectory() {
     let entries: fs.Dirent[];
     try {
@@ -160,59 +161,12 @@ export function startHookWatcher(
       return;
     }
 
-    // On first run, just seed the known set without assigning
-    if (!plansInitialized) {
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.md')) {
-          knownPlanPaths.add(path.join(PLANS_DIR, entry.name));
-        }
-      }
-      plansInitialized = true;
-      return;
-    }
-
-    // Find newly appeared plan files
-    const newFiles: { path: string; mtimeMs: number }[] = [];
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
-      const filePath = path.join(PLANS_DIR, entry.name);
-      if (!knownPlanPaths.has(filePath)) {
-        knownPlanPaths.add(filePath);
-        try {
-          const stat = fs.statSync(filePath);
-          newFiles.push({ path: filePath, mtimeMs: stat.mtimeMs });
-        } catch { /* ignore */ }
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        knownPlanPaths.add(path.join(PLANS_DIR, entry.name));
       }
     }
-
-    if (newFiles.length === 0) return;
-
-    // Sort newest first
-    newFiles.sort((a, b) => b.mtimeMs - a.mtimeMs);
-
-    // Assign each new file to a busy session that doesn't already have a plan
-    const allSessions = ptyManager.getAllSessionIds();
-    for (const file of newFiles) {
-      // Find a busy session without an assigned plan
-      const candidate = allSessions.find((sid) => {
-        // Check if session is busy
-        const statusFile = ptyManager.getStatusFile(sid);
-        if (!statusFile) return false;
-        try {
-          const content = fs.readFileSync(statusFile, 'utf-8').trim();
-          if (!content.startsWith('busy;')) return false;
-        } catch {
-          return false;
-        }
-        // Check if session already has a plan
-        return !lastPlanContent.has(sid);
-      });
-
-      if (candidate) {
-        lastPlanContent.set(candidate, file.path);
-        server.broadcast(IPC.HOOK_PLAN, { sessionId: candidate, planPath: file.path });
-      }
-    }
+    plansInitialized = true;
   }
 
   // Slow polling fallback — catches anything fs.watch might miss

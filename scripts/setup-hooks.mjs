@@ -18,8 +18,10 @@ const hookExt = process.platform === 'win32' ? '.js' : '.sh';
 const hooksBase = isDev ? join(projectRoot, 'hooks') : join(homedir(), '.airport', 'hooks');
 const busyScript = join(hooksBase, `airport-busy${hookExt}`);
 const doneScript = join(hooksBase, `airport-done${hookExt}`);
+const sessionStartScript = join(hooksBase, `airport-session-start${hookExt}`);
 
 const DESIRED_HOOKS = {
+  SessionStart:     sessionStartScript,
   UserPromptSubmit: busyScript,
   PreToolUse:       busyScript,
   PostToolUse:      busyScript,
@@ -30,7 +32,8 @@ const DESIRED_HOOKS = {
 const isAirportHook = (cmd) => {
   const normalized = cmd.replace(/\\/g, '/');
   return normalized.endsWith('/hooks/airport-busy.sh') || normalized.endsWith('/hooks/airport-done.sh') ||
-         normalized.endsWith('/hooks/airport-busy.js') || normalized.endsWith('/hooks/airport-done.js');
+         normalized.endsWith('/hooks/airport-busy.js') || normalized.endsWith('/hooks/airport-done.js') ||
+         normalized.endsWith('/hooks/airport-session-start.sh') || normalized.endsWith('/hooks/airport-session-start.js');
 };
 
 const claudeDir = join(homedir(), '.claude');
