@@ -1,11 +1,13 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { SearchAddon } from '@xterm/addon-search';
 import { terminalTheme } from '../lib/theme';
 import { serializeShadowBuffer } from '../lib/terminal-factory';
 import { BidiOverlay } from '../lib/bidi-overlay';
+import { TerminalSearchBar } from './TerminalSearchBar';
 import '@xterm/xterm/css/xterm.css';
 
 interface MainTerminalProps {
@@ -17,6 +19,8 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
 
   const handleResize = useCallback(() => {
     if (fitRef.current && termRef.current) {
@@ -39,8 +43,11 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
 
     const fitAddon = new FitAddon();
     const serializeAddon = new SerializeAddon();
+    const searchAddon = new SearchAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(serializeAddon);
+    term.loadAddon(searchAddon);
+    searchRef.current = searchAddon;
 
     term.open(containerRef.current);
 
@@ -57,6 +64,9 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
     // Let Ctrl+Tab bubble to the window handler
     term.attachCustomKeyEventHandler((e) => {
       if (e.ctrlKey && e.key === 'Tab') return false;
+      // Let Cmd+F / Cmd+G / Cmd+Shift+G bubble for terminal search
+      const isMod = navigator.userAgent.includes('Windows') ? e.ctrlKey : e.metaKey;
+      if (isMod && (e.key === 'f' || e.key === 'g')) return false;
       // On Windows, let Ctrl+<key> shortcuts bubble to window handler
       if (navigator.userAgent.includes('Windows') && e.ctrlKey && !e.altKey && !e.shiftKey) {
         if (['t', 'w', 'j', 'k', '[', ']', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(e.key)) {
@@ -113,17 +123,42 @@ export function MainTerminal({ sessionId, onDimensions }: MainTerminalProps) {
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      searchRef.current = null;
     };
   }, [sessionId]);
 
+  // Cmd+F to toggle search bar
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMod = navigator.userAgent.includes('Windows') ? e.ctrlKey : e.metaKey;
+      if (isMod && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100%',
-        height: '100%',
-        padding: '4px',
-      }}
-    />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {showSearch && (
+        <TerminalSearchBar
+          searchAddon={searchRef.current}
+          onClose={() => {
+            setShowSearch(false);
+            termRef.current?.focus();
+          }}
+        />
+      )}
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          padding: '4px',
+        }}
+      />
+    </div>
   );
 }
