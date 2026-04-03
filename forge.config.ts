@@ -18,7 +18,7 @@ const config: ForgeConfig = {
       unpack: '{**/node-pty/**,**/*.node}',
     },
     name: 'Airport',
-    extraResource: ['CHANGELOG.md'],
+    extraResource: ['CHANGELOG.md', 'bin'],
   },
   hooks: {
     preStart: async () => {

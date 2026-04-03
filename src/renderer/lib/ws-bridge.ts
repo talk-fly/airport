@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from '../../shared/ws-protocol';
-import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult } from '../../shared/types';
+import type { AirportApi, PtyCreateOptions, PtyDataEvent, PtyExitEvent, HookStatusEvent, HookSessionEvent, HookPlanEvent, HookEditorEvent, SpawnRequestEvent, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult } from '../../shared/types';
 import { IPC } from '../../shared/ipc-channels';
 
 let ws: WebSocket;
@@ -198,5 +198,13 @@ export function createAirportApi(): AirportApi {
       invoke(IPC.UPDATE_INSTALL, downloadUrl) as Promise<void>,
     onMenuCheckUpdates: (callback: () => void) =>
       on('menu:check-updates', callback as (data: unknown) => void),
+    submitEditor: (sessionId: string, content: string) =>
+      invoke(IPC.EDITOR_SUBMIT, sessionId, content) as Promise<void>,
+    cancelEditor: (sessionId: string) =>
+      invoke(IPC.EDITOR_CANCEL, sessionId) as Promise<void>,
+    readEditorFile: (filePath: string) =>
+      invoke(IPC.EDITOR_READ_FILE, filePath) as Promise<string>,
+    onEditorRequest: (callback: (event: HookEditorEvent) => void) =>
+      on(IPC.HOOK_EDITOR, callback as (data: unknown) => void),
   };
 }

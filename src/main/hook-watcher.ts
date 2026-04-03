@@ -25,6 +25,7 @@ export function startHookWatcher(
   const lastContent = new Map<string, string>();
   const lastSessionContent = new Map<string, string>();
   const lastPlanContent = new Map<string, string>();
+  const lastEditorContent = new Map<string, string>();
   // Track known plan files (by path) so we can detect new ones
   const knownPlanPaths = new Set<string>();
   let plansInitialized = false;
@@ -122,6 +123,24 @@ export function startHookWatcher(
     });
   }
 
+  function processEditorFile(sessionId: string) {
+    const statusFile = ptyManager.getStatusFile(sessionId);
+    if (!statusFile) return;
+
+    const editorFile = statusFile.replace(/\.status$/, '.editor');
+    let filePath: string;
+    try {
+      filePath = fs.readFileSync(editorFile, 'utf-8').trim();
+    } catch {
+      return;
+    }
+
+    if (!filePath || filePath === lastEditorContent.get(sessionId)) return;
+    lastEditorContent.set(sessionId, filePath);
+
+    server.broadcast(IPC.HOOK_EDITOR, { sessionId, filePath });
+  }
+
   // fs.watch on the directory: OS notifies us the moment any file changes
   let dirWatcher: fs.FSWatcher | undefined;
   try {
@@ -137,6 +156,9 @@ export function startHookWatcher(
         processPlanFile(sessionId);
       } else if (filename && filename.endsWith('.spawn')) {
         processSpawnFile(path.join(STATUS_DIR, filename));
+      } else if (filename && filename.endsWith('.editor') && !filename.endsWith('.editor-done')) {
+        const sessionId = filename.slice(0, -7); // strip '.editor'
+        processEditorFile(sessionId);
       } else {
         // filename can be null on some platforms — scan all sessions
         for (const sessionId of ptyManager.getAllSessionIds()) {
@@ -175,6 +197,7 @@ export function startHookWatcher(
       processSession(sessionId);
       processClaudeSessionFile(sessionId);
       processPlanFile(sessionId);
+      processEditorFile(sessionId);
     }
     pollPlansDirectory();
   }, 2000);
@@ -185,5 +208,6 @@ export function startHookWatcher(
     lastContent.clear();
     lastSessionContent.clear();
     lastPlanContent.clear();
+    lastEditorContent.clear();
   };
 }

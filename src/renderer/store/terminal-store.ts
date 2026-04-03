@@ -11,6 +11,8 @@ interface TerminalStore {
   nextColorIndex: number;
   planViewSessionId: string | null;
   planViewPath: string | null;
+  editorSessionId: string | null;
+  editorFilePath: string | null;
   workspaces: Workspace[];
   activeWorkspaceId: string;
   workspaceActiveSessionIds: Record<string, string>;
@@ -35,6 +37,8 @@ interface TerminalStore {
   setPlanFiles: (id: string, planFiles: PlanFile[]) => void;
   viewPlan: (sessionId: string, path: string) => void;
   closePlanView: () => void;
+  openEditor: (sessionId: string, filePath: string) => void;
+  closeEditor: () => void;
   addWorkspace: (name?: string) => void;
   removeWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
@@ -57,6 +61,8 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
   nextColorIndex: 0,
   planViewSessionId: null,
   planViewPath: null,
+  editorSessionId: null,
+  editorFilePath: null,
   workspaces: [DEFAULT_WORKSPACE],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   workspaceActiveSessionIds: {},
@@ -89,10 +95,12 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
           : sessions.length > 0 ? sessions[sessions.length - 1].id : null;
       }
       const clearPlan = state.planViewSessionId === id;
+      const clearEditor = state.editorSessionId === id;
       return {
         sessions,
         activeSessionId,
         ...(clearPlan ? { planViewSessionId: null, planViewPath: null } : {}),
+        ...(clearEditor ? { editorSessionId: null, editorFilePath: null } : {}),
       };
     }),
 
@@ -246,6 +254,18 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
     set(() => ({
       planViewSessionId: null,
       planViewPath: null,
+    })),
+
+  openEditor: (sessionId, filePath) =>
+    set(() => ({
+      editorSessionId: sessionId,
+      editorFilePath: filePath,
+    })),
+
+  closeEditor: () =>
+    set(() => ({
+      editorSessionId: null,
+      editorFilePath: null,
     })),
 
   addWorkspace: (name) =>

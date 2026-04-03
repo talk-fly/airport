@@ -194,6 +194,14 @@ export function usePtyBridge() {
       }
     });
 
+    // Listen for editor requests from main process (file-based IPC)
+    const unsubEditor = window.airport.onEditorRequest(({ sessionId, filePath }) => {
+      const { activeSessionId } = useTerminalStore.getState();
+      if (sessionId === activeSessionId) {
+        useTerminalStore.getState().openEditor(sessionId, filePath);
+      }
+    });
+
     const unsubExit = window.airport.pty.onExit(({ sessionId }) => {
       disposeShadowTerminal(sessionId);
       removeSession(sessionId);
@@ -295,6 +303,7 @@ export function usePtyBridge() {
       unsubHook();
       unsubSession();
       unsubPlan();
+      unsubEditor();
       unsubExit();
       unsubSaveRequest();
       clearInterval(autoSaveInterval);

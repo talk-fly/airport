@@ -3,10 +3,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { PtyManager } from './pty-manager';
 import { WsServer } from './ws-server';
 import { IPC } from '../shared/ipc-channels';
-import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult } from '../shared/types';
+import { PtyCreateOptions, SessionInfo, SavedState, ExternalTerminal, PlanFile, WorktreeCreateRequest, WorktreeCreateResult, UpdateCheckResult, HookEditorEvent } from '../shared/types';
 import { saveState, loadState } from './state-manager';
 
 const execFileAsync = promisify(execFile);
@@ -362,5 +363,42 @@ export function registerIpcHandlers(ptyManager: PtyManager, server: WsServer): v
     } catch {
       return '';
     }
+  });
+
+  // Editor integration: read temp file content for the editor panel
+  server.handle(IPC.EDITOR_READ_FILE, async (filePath: string): Promise<string> => {
+    try {
+      return await fs.promises.readFile(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
+  });
+
+  // Editor integration: write edited content back and signal the blocking script
+  const STATUS_DIR = path.join(os.tmpdir(), `airport-${process.pid}`);
+
+  server.handle(IPC.EDITOR_SUBMIT, async (sessionId: string, content: string): Promise<void> => {
+    const editorFile = path.join(STATUS_DIR, `${sessionId}.editor`);
+    const doneFile = path.join(STATUS_DIR, `${sessionId}.editor-done`);
+
+    // Read the temp file path from the .editor sidecar
+    let tmpFilePath: string;
+    try {
+      tmpFilePath = await fs.promises.readFile(editorFile, 'utf-8');
+      tmpFilePath = tmpFilePath.trim();
+    } catch {
+      return;
+    }
+
+    // Write edited content back to the temp file
+    await fs.promises.writeFile(tmpFilePath, content, 'utf-8');
+    // Signal the blocking airport-editor script to exit
+    await fs.promises.writeFile(doneFile, 'submit', 'utf-8');
+  });
+
+  server.handle(IPC.EDITOR_CANCEL, async (sessionId: string): Promise<void> => {
+    const doneFile = path.join(STATUS_DIR, `${sessionId}.editor-done`);
+    // Signal the blocking airport-editor script to exit with cancel
+    await fs.promises.writeFile(doneFile, 'cancel', 'utf-8');
   });
 }

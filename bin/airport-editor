@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# airport-editor — Custom editor for Claude Code's Ctrl+G in Airport.
+#
+# Claude Code sets $VISUAL to this script. When invoked with a temp file path,
+# it signals Airport to open an in-app editor panel, then blocks until the
+# user submits or cancels.
+#
+# Usage (called by Claude Code, not directly):
+#   airport-editor /tmp/some-temp-file.txt
+
+set -euo pipefail
+
+if [ -z "${AIRPORT_SPAWN_DIR:-}" ]; then
+  echo "Error: AIRPORT_SPAWN_DIR is not set. This script must be run from within an Airport terminal session." >&2
+  echo "Falling back to vi..." >&2
+  exec vi "$@"
+fi
+
+if [ -z "${AIRPORT_STATUS_FILE:-}" ]; then
+  echo "Error: AIRPORT_STATUS_FILE is not set." >&2
+  exec vi "$@"
+fi
+
+if [ $# -lt 1 ]; then
+  echo "Usage: airport-editor <file>" >&2
+  exit 1
+fi
+
+TMPFILE="$1"
+SESSION_ID="$(basename "$AIRPORT_STATUS_FILE" .status)"
+EDITOR_FILE="${AIRPORT_SPAWN_DIR}/${SESSION_ID}.editor"
+DONE_FILE="${AIRPORT_SPAWN_DIR}/${SESSION_ID}.editor-done"
+
+# Clean up on exit (normal or interrupted)
+cleanup() {
+  rm -f "$EDITOR_FILE" "$DONE_FILE"
+}
+trap cleanup EXIT
+
+# Signal Airport to open the editor panel with this file
+printf '%s' "$TMPFILE" > "$EDITOR_FILE"
+
+# Block until Airport signals editing is complete
+while [ ! -f "$DONE_FILE" ]; do
+  sleep 0.1
+done
+
+# Read the result: "submit" means content was written back, "cancel" means abort
+RESULT="$(cat "$DONE_FILE" 2>/dev/null || echo "cancel")"
+
+if [ "$RESULT" = "cancel" ]; then
+  exit 1
+fi
+
+exit 0

@@ -23,7 +23,15 @@ interface PtySession {
 }
 
 const STATUS_DIR = path.join(os.tmpdir(), `airport-${process.pid}`);
-const BIN_DIR = process.env.AIRPORT_BIN_DIR || path.join(__dirname, '..', '..', 'bin');
+function resolveBinDir(): string {
+  if (process.env.AIRPORT_BIN_DIR) return process.env.AIRPORT_BIN_DIR;
+  // In packaged Electron apps, extraResource files land in Contents/Resources/
+  const resourceBin = path.join(process.resourcesPath || '', 'bin');
+  if (process.resourcesPath && fs.existsSync(resourceBin)) return resourceBin;
+  // Dev fallback
+  return path.join(__dirname, '..', '..', 'bin');
+}
+const BIN_DIR = resolveBinDir();
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
@@ -69,6 +77,8 @@ export class PtyManager {
         AIRPORT_PID: String(process.pid),
         AIRPORT_SPAWN_DIR: STATUS_DIR,
         AIRPORT_STATUS_FILE: statusFile,
+        VISUAL: path.join(BIN_DIR, 'airport-editor'),
+        EDITOR: path.join(BIN_DIR, 'airport-editor'),
         ...(options.workspaceName ? { AIRPORT_WORKSPACE_NAME: options.workspaceName } : {}),
         ...(options.claudeSessionId ? { AIRPORT_CLAUDE_SESSION_ID: options.claudeSessionId } : {}),
         PATH: `${BIN_DIR}${path.delimiter}${existingPath}`,

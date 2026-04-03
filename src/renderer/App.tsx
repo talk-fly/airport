@@ -4,6 +4,7 @@ import { MainTerminal } from './components/MainTerminal';
 import { SessionControls } from './components/SessionControls';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { PlanReviewPanel } from './components/PlanReviewPanel';
+import { EditorPanel } from './components/EditorPanel';
 import { WhatsNewPanel } from './components/WhatsNewPanel';
 import { WorkspaceDots } from './components/WorkspaceDots';
 import { UpdateDialog } from './components/UpdateDialog';
@@ -17,7 +18,7 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 600;
 
 export function App() {
-  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, workspaces, activeWorkspaceId, setActiveWorkspace, showChangelog, openChangelog, showUpdateDialog, openUpdateDialog, closeUpdateDialog } = useTerminalStore();
+  const { sessions, activeSessionId, previousSessionId, setActiveSession, planViewSessionId, planViewPath, editorSessionId, editorFilePath, workspaces, activeWorkspaceId, setActiveWorkspace, showChangelog, openChangelog, showUpdateDialog, openUpdateDialog, closeUpdateDialog } = useTerminalStore();
   const workspaceEmpty = sessions.length === 0 || !sessions.some((s) => s.workspaceId === activeWorkspaceId && !s.backlog);
   const { createSession, closeSession, setMainDimensions, restoreState, clearTerminal } = usePtyBridge();
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -312,6 +313,11 @@ export function App() {
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}>
           {showChangelog ? (
             <WhatsNewPanel />
+          ) : editorSessionId && editorFilePath ? (
+            <EditorPanel
+              sessionId={editorSessionId}
+              filePath={editorFilePath}
+            />
           ) : workspaceEmpty ? (
             <OnboardingScreen
               onNewSession={handleNewSession}

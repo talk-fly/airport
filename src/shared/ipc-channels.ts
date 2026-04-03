@@ -22,4 +22,8 @@ export const IPC = {
   WORKTREE_CREATE: 'worktree:create',
   UPDATE_CHECK: 'updates:check',
   UPDATE_INSTALL: 'updates:install',
+  HOOK_EDITOR: 'hook:editor',
+  EDITOR_SUBMIT: 'editor:submit',
+  EDITOR_CANCEL: 'editor:cancel',
+  EDITOR_READ_FILE: 'editor:readFile',
 } as const;

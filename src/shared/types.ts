@@ -108,6 +108,11 @@ export interface SpawnRequestEvent {
   command?: string;
 }
 
+export interface HookEditorEvent {
+  sessionId: string;
+  filePath: string;
+}
+
 export interface WorktreeCreateRequest {
   cwd: string;
   taskDescription: string;
@@ -164,6 +169,10 @@ export interface AirportApi {
   checkForUpdates: () => Promise<UpdateCheckResult>;
   installUpdate: (downloadUrl: string) => Promise<void>;
   onMenuCheckUpdates: (callback: () => void) => () => void;
+  submitEditor: (sessionId: string, content: string) => Promise<void>;
+  cancelEditor: (sessionId: string) => Promise<void>;
+  readEditorFile: (filePath: string) => Promise<string>;
+  onEditorRequest: (callback: (event: HookEditorEvent) => void) => () => void;
 }
 
 declare global {
